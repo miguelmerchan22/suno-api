@@ -335,11 +335,111 @@ class SunoApi {
   }
 
   /**
-   * Checks for CAPTCHA verification and solves the CAPTCHA if needed
-   * @returns {string|null} hCaptcha token. If no verification is required, returns null
+   * Checks for CAPTCHA verification and solves the Cloudflare Turnstile if needed.
+   * Uses the headless browser (rebrowser-playwright-core) already configured on this server.
+   * @returns {string|null} Turnstile token, or null if not required / failed
    */
   public async getCaptcha(): Promise<string|null> {
-    return null;
+    // First check if captcha is actually required
+    try {
+      const required = await this.captchaRequired();
+      if (!required) {
+        logger.info('Captcha not required, skipping');
+        return null;
+      }
+    } catch(e: any) {
+      logger.warn('captchaRequired check failed, proceeding: ' + e.message);
+    }
+
+    logger.info('Solving Cloudflare Turnstile via headless browser...');
+    let context: BrowserContext | null = null;
+    try {
+      context = await this.launchBrowser();
+      const page = await context.newPage();
+
+      // Inject script BEFORE page loads to intercept Turnstile token
+      await page.addInitScript(() => {
+        (window as any).__cfTurnstileToken = null;
+
+        // Method 1: intercept fetch calls to capture token from generate request body
+        const origFetch = window.fetch.bind(window);
+        (window as any).fetch = async function(...args: any[]) {
+          const url = (args[0] || '').toString();
+          if (url.includes('studio-api') && args[1] && args[1].body) {
+            try {
+              const body = JSON.parse(args[1].body);
+              if (body && body.token) {
+                (window as any).__cfTurnstileToken = body.token;
+              }
+            } catch(e) { /* ignore parse errors */ }
+          }
+          return origFetch(...args);
+        };
+
+        // Method 2: intercept window.turnstile assignment to wrap render callback
+        let _turnstile: any = null;
+        Object.defineProperty(window, 'turnstile', {
+          get: () => _turnstile,
+          set: (val: any) => {
+            _turnstile = val;
+            if (val && typeof val.render === 'function') {
+              const origRender = val.render.bind(val);
+              val.render = function(container: any, params: any = {}) {
+                const origCb = params.callback;
+                params.callback = (token: string) => {
+                  (window as any).__cfTurnstileToken = token;
+                  if (origCb) origCb(token);
+                };
+                return origRender(container, params);
+              };
+            }
+          },
+          configurable: true
+        });
+      });
+
+      // Navigate to the create page (Turnstile runs automatically on load)
+      await page.goto('https://suno.com/create', {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000
+      });
+
+      // Wait up to 25 seconds for token via Methods 1 or 2
+      const token = await page.waitForFunction(
+        () => (window as any).__cfTurnstileToken,
+        { timeout: 25000, polling: 500 }
+      ).then(h => h.jsonValue() as Promise<string>)
+      .catch(async () => {
+        // Method 3: try window.turnstile.getResponse() directly
+        return page.evaluate(() => {
+          const t = (window as any).turnstile || (window as any)._turnstile;
+          if (!t) return null;
+          // Try without widgetId (implicit)
+          try { const r = t.getResponse(); if (r) return r; } catch(e) {}
+          // Try all widget containers
+          const widgets = document.querySelectorAll('[id^="cf-chl-widget"]');
+          for (const w of widgets) {
+            try { const r = t.getResponse(w.id); if (r) return r; } catch(e) {}
+          }
+          return null;
+        });
+      });
+
+      if (token) {
+        logger.info('Cloudflare Turnstile token obtained successfully!');
+        return token as string;
+      }
+
+      logger.warn('Could not obtain Turnstile token from browser');
+      return null;
+    } catch(e: any) {
+      logger.error('getCaptcha browser error: ' + e.message);
+      return null;
+    } finally {
+      if (context) {
+        try { await context.close(); } catch(e) {}
+      }
+    }
   }
 
   /**
