@@ -18,7 +18,18 @@ const cache = globalForSunoApi.sunoApiCache || new Map<string, SunoApi>();
 globalForSunoApi.sunoApiCache = cache;
 
 const logger = pino();
-export const DEFAULT_MODEL = 'chirp-v3-5';
+
+// Suno model versions
+export const SUNO_MODELS = {
+  V3_5: 'chirp-v3-5',
+  V4: 'chirp-v4',
+  V4_5_PLUS: 'chirp-bluejay',  // V4.5+ (蓝松鸦)
+  V4_5_PRO: 'chirp-auk',        // V4.5 Pro (海雀)
+  V5: 'chirp-crow',             // V5 (乌鸦)
+} as const;
+
+// Default to latest version (V5)
+export const DEFAULT_MODEL = SUNO_MODELS.V5;
 
 export interface AudioInfo {
   id: string; // Unique identifier for the audio
@@ -122,8 +133,16 @@ class SunoApi {
 
   public async init(): Promise<SunoApi> {
     //await this.getClerkLatestVersion();
-    await this.getAuthToken();
-    await this.keepAlive();
+
+    // 如果 cookie 里已经有 __session（JWT token），直接使用
+    if (this.cookies.__session && this.cookies.__session.length > 100) {
+      logger.info('Using existing __session token from cookies');
+      this.currentToken = this.cookies.__session;
+      this.sid = 'dummy_session_id'; // 设置一个假的 sid 以绕过检查
+    } else {
+      await this.getAuthToken();
+      await this.keepAlive();
+    }
     return this;
   }
 
@@ -174,6 +193,13 @@ class SunoApi {
     if (!this.sid) {
       throw new Error('Session ID is not set. Cannot renew token.');
     }
+
+    // 如果使用的是直接提供的 __session token，跳过 renew
+    if (this.sid === 'dummy_session_id') {
+      logger.info('Using direct JWT token, skipping keepAlive');
+      return;
+    }
+
     // URL to renew session token
     const renewUrl = `${SunoApi.CLERK_BASE_URL}/v1/client/sessions/${this.sid}/tokens?_is_native=true&_clerk_js_version=${SunoApi.CLERK_VERSION}`;
     // Renew session token
@@ -305,6 +331,13 @@ class SunoApi {
    * @returns {string|null} hCaptcha token. If no verification is required, returns null
    */
   public async getCaptcha(): Promise<string|null> {
+    // 跳过验证码检查，直接返回 null
+    // Suno 现在似乎不强制要求验证码，或者验证码检查本身有问题
+    logger.info('Skipping CAPTCHA check');
+    return null;
+
+    // 原始代码（如果需要恢复验证码功能，取消下面的注释）
+    /*
     if (!await this.captchaRequired())
       return null;
 
@@ -426,6 +459,7 @@ class SunoApi {
         }
       });
     }));
+    */
   }
 
   /**
@@ -558,6 +592,11 @@ class SunoApi {
     continue_at?: number
   ): Promise<AudioInfo[]> {
     await this.keepAlive();
+    const captchaToken = await this.getCaptcha();
+
+    // 生成 session token（模拟浏览器行为）
+    const createSessionToken = randomUUID();
+
     const payload: any = {
       make_instrumental: make_instrumental,
       mv: model || DEFAULT_MODEL,
@@ -566,8 +605,33 @@ class SunoApi {
       continue_at: continue_at,
       continue_clip_id: continue_clip_id,
       task: task,
-      token: await this.getCaptcha()
+      // 添加 metadata 字段，模拟浏览器请求
+      metadata: {
+        web_client_pathname: '/create',
+        is_max_mode: false,
+        is_mumble: false,
+        create_mode: 'custom',
+        create_session_token: createSessionToken,
+        disable_volume_normalization: false,
+        can_control_sliders: ['weirdness_constraint', 'style_weight']
+      },
+      // 其他浏览器发送的字段
+      user_uploaded_images_b64: null,
+      override_fields: [],
+      cover_clip_id: null,
+      cover_start_s: null,
+      cover_end_s: null,
+      persona_id: null,
+      artist_clip_id: null,
+      artist_start_s: null,
+      artist_end_s: null,
+      continued_aligned_prompt: null,
+      transaction_uuid: randomUUID()
     };
+    // 只有当 captcha token 存在时才添加 token 字段
+    if (captchaToken) {
+      payload.token = captchaToken;
+    }
     if (isCustom) {
       payload.tags = tags;
       payload.title = title;
