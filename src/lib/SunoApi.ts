@@ -95,11 +95,13 @@ class SunoApi {
 
   constructor(cookies: string) {
     this.userAgent = new UserAgent(/Macintosh/).random().toString(); // Usually Mac systems get less amount of CAPTCHAs
-    this.cookies = cookie.parse(cookies.trim());
-    // Trim whitespace/newlines from each cookie value to handle copy-paste artifacts
+    // Strip all control characters (newlines, carriage returns, etc.) that break HTTP headers
+    const cleanCookies = cookies.replace(/[\x00-\x1F\x7F]/g, '');
+    this.cookies = cookie.parse(cleanCookies);
+    // Also strip control characters from each individual parsed value
     for (const key of Object.keys(this.cookies)) {
       if (this.cookies[key]) {
-        this.cookies[key] = this.cookies[key]!.trim();
+        this.cookies[key] = this.cookies[key]!.replace(/[\x00-\x1F\x7F]/g, '').trim();
       }
     }
     this.deviceId = this.cookies.ajs_anonymous_id || randomUUID();
