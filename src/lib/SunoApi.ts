@@ -23,9 +23,9 @@ const logger = pino();
 export const SUNO_MODELS = {
   V3_5: 'chirp-v3-5',
   V4: 'chirp-v4',
-  V4_5_PLUS: 'chirp-bluejay',  // V4.5+ (蓝松鸦)
-  V4_5_PRO: 'chirp-auk',        // V4.5 Pro (海雀)
-  V5: 'chirp-crow',             // V5 (乌鸦)
+  V4_5_PLUS: 'chirp-bluejay',  // V4.5+ (ËìùÊùæÈ∏¶)
+  V4_5_PRO: 'chirp-auk',        // V4.5 Pro (Êµ∑ÈõÄ)
+  V5: 'chirp-crow',             // V5 (‰πåÈ∏¶)
 } as const;
 
 // Default to latest version (V5)
@@ -95,7 +95,13 @@ class SunoApi {
 
   constructor(cookies: string) {
     this.userAgent = new UserAgent(/Macintosh/).random().toString(); // Usually Mac systems get less amount of CAPTCHAs
-    this.cookies = cookie.parse(cookies);
+    this.cookies = cookie.parse(cookies.trim());
+    // Trim whitespace/newlines from each cookie value to handle copy-paste artifacts
+    for (const key of Object.keys(this.cookies)) {
+      if (this.cookies[key]) {
+        this.cookies[key] = this.cookies[key]!.trim();
+      }
+    }
     this.deviceId = this.cookies.ajs_anonymous_id || randomUUID();
     this.client = axios.create({
       withCredentials: true,
@@ -134,11 +140,11 @@ class SunoApi {
   public async init(): Promise<SunoApi> {
     //await this.getClerkLatestVersion();
 
-    // 如果 cookie 里已经有 __session（JWT token），直接使用
+    // Â¶ÇÊûú cookie ÈáåÂ∑≤ÁªèÊúâ __sessionÔºàJWT tokenÔºâÔºåÁõ¥Êé•‰ΩøÁî®
     if (this.cookies.__session && this.cookies.__session.length > 100) {
       logger.info('Using existing __session token from cookies');
       this.currentToken = this.cookies.__session;
-      this.sid = 'dummy_session_id'; // 设置一个假的 sid 以绕过检查
+      this.sid = 'dummy_session_id'; // ËÆæÁΩÆ‰∏Ä‰∏™ÂÅáÁöÑ sid ‰ª•ÁªïËøáÊ£ÄÊü•
     } else {
       await this.getAuthToken();
       await this.keepAlive();
@@ -194,7 +200,7 @@ class SunoApi {
       throw new Error('Session ID is not set. Cannot renew token.');
     }
 
-    // 如果使用的是直接提供的 __session token，跳过 renew
+    // Â¶ÇÊûú‰ΩøÁî®ÁöÑÊòØÁõ¥Êé•Êèê‰æõÁöÑ __session tokenÔºåË∑≥Ëøá renew
     if (this.sid === 'dummy_session_id') {
       logger.info('Using direct JWT token, skipping keepAlive');
       return;
@@ -466,7 +472,7 @@ class SunoApi {
     await this.keepAlive();
     const captchaToken = await this.getCaptcha();
 
-    // 生成 session token（模拟浏览器行为）
+    // ÁîüÊàê session tokenÔºàÊ®°ÊãüÊµèËßàÂô®Ë°å‰∏∫Ôºâ
     const createSessionToken = randomUUID();
 
     const payload: any = {
@@ -477,7 +483,7 @@ class SunoApi {
       continue_at: continue_at,
       continue_clip_id: continue_clip_id,
       task: task,
-      // 添加 metadata 字段，模拟浏览器请求
+      // Ê∑ªÂä† metadata Â≠óÊÆµÔºåÊ®°ÊãüÊµèËßàÂô®ËØ∑Ê±Ç
       metadata: {
         web_client_pathname: '/create',
         is_max_mode: false,
@@ -487,7 +493,7 @@ class SunoApi {
         disable_volume_normalization: false,
         can_control_sliders: ['weirdness_constraint', 'style_weight']
       },
-      // 其他浏览器发送的字段
+      // ÂÖ∂‰ªñÊµèËßàÂô®ÂèëÈÄÅÁöÑÂ≠óÊÆµ
       user_uploaded_images_b64: null,
       override_fields: [],
       cover_clip_id: null,
@@ -500,7 +506,7 @@ class SunoApi {
       continued_aligned_prompt: null,
       transaction_uuid: randomUUID()
     };
-    // 只有当 captcha token 存在时才添加 token 字段
+    // Âè™ÊúâÂΩì captcha token Â≠òÂú®Êó∂ÊâçÊ∑ªÂä† token Â≠óÊÆµ
     if (captchaToken) {
       payload.token = captchaToken;
     }
