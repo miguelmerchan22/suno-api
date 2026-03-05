@@ -352,7 +352,40 @@ class SunoApi {
       logger.warn('captchaRequired check failed, proceeding: ' + e.message);
     }
 
-    // Method 1: Use 2captcha service (works reliably on any server/environment)
+    // Method 1a: Use CapSolver service if CAPSOLVER_KEY is configured (free trial available at capsolver.com)
+    const capsolverKey = process.env.CAPSOLVER_KEY;
+    if (capsolverKey && capsolverKey.trim() && capsolverKey !== 'undefined') {
+      logger.info('Solving Cloudflare Turnstile via CapSolver...');
+      try {
+        const createRes = await axios.post('https://api.capsolver.com/createTask', {
+          clientKey: capsolverKey,
+          task: {
+            type: 'AntiTurnstileTaskProxyLess',
+            websiteURL: 'https://suno.com/create',
+            websiteKey: '0x4AAAAAABd64Cd9aq5C--VE'
+          }
+        });
+        const taskId = createRes.data?.taskId;
+        if (taskId) {
+          // Poll for result (up to 30s)
+          for (let i = 0; i < 15; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            const resultRes = await axios.post('https://api.capsolver.com/getTaskResult', {
+              clientKey: capsolverKey,
+              taskId
+            });
+            if (resultRes.data?.status === 'ready' && resultRes.data?.solution?.token) {
+              logger.info('Turnstile solved via CapSolver!');
+              return resultRes.data.solution.token;
+            }
+          }
+        }
+      } catch(e: any) {
+        logger.error('CapSolver failed: ' + e.message);
+      }
+    }
+
+    // Method 1b: Use 2captcha service if TWOCAPTCHA_KEY is configured
     const twocaptchaKey = process.env.TWOCAPTCHA_KEY;
     if (twocaptchaKey && twocaptchaKey.trim() && twocaptchaKey !== 'undefined') {
       logger.info('Solving Cloudflare Turnstile via 2captcha service...');
