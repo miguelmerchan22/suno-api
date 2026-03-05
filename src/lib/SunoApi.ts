@@ -335,8 +335,9 @@ class SunoApi {
   }
 
   /**
-   * Checks for CAPTCHA verification and solves the Cloudflare Turnstile if needed.
-   * Uses the headless browser (rebrowser-playwright-core) already configured on this server.
+   * Solves the Cloudflare Turnstile CAPTCHA required by Suno's generate endpoint.
+   * Method 1 (preferred): Uses 2captcha service if TWOCAPTCHA_KEY is configured.
+   * Method 2 (fallback): Uses the headless browser already configured on this server.
    * @returns {string|null} Turnstile token, or null if not required / failed
    */
   public async getCaptcha(): Promise<string|null> {
@@ -351,6 +352,25 @@ class SunoApi {
       logger.warn('captchaRequired check failed, proceeding: ' + e.message);
     }
 
+    // Method 1: Use 2captcha service (works reliably on any server/environment)
+    const twocaptchaKey = process.env.TWOCAPTCHA_KEY;
+    if (twocaptchaKey && twocaptchaKey.trim() && twocaptchaKey !== 'undefined') {
+      logger.info('Solving Cloudflare Turnstile via 2captcha service...');
+      try {
+        const result = await this.solver.cloudflareTurnstile({
+          pageurl: 'https://suno.com/create',
+          sitekey: '0x4AAAAAABd64Cd9aq5C--VE'
+        });
+        if (result && result.data) {
+          logger.info('Turnstile solved via 2captcha!');
+          return result.data;
+        }
+      } catch(e: any) {
+        logger.error('2captcha failed: ' + e.message);
+      }
+    }
+
+    // Method 2: Use headless browser (requires Playwright + system deps on server)
     logger.info('Solving Cloudflare Turnstile via headless browser...');
     let context: BrowserContext | null = null;
     try {
@@ -361,22 +381,7 @@ class SunoApi {
       await page.addInitScript(() => {
         (window as any).__cfTurnstileToken = null;
 
-        // Method 1: intercept fetch calls to capture token from generate request body
-        const origFetch = window.fetch.bind(window);
-        (window as any).fetch = async function(...args: any[]) {
-          const url = (args[0] || '').toString();
-          if (url.includes('studio-api') && args[1] && args[1].body) {
-            try {
-              const body = JSON.parse(args[1].body);
-              if (body && body.token) {
-                (window as any).__cfTurnstileToken = body.token;
-              }
-            } catch(e) { /* ignore parse errors */ }
-          }
-          return origFetch(...args);
-        };
-
-        // Method 2: intercept window.turnstile assignment to wrap render callback
+        // Intercept window.turnstile assignment to wrap render callback
         let _turnstile: any = null;
         Object.defineProperty(window, 'turnstile', {
           get: () => _turnstile,
@@ -404,19 +409,17 @@ class SunoApi {
         timeout: 30000
       });
 
-      // Wait up to 25 seconds for token via Methods 1 or 2
+      // Wait up to 25 seconds for token
       const token = await page.waitForFunction(
         () => (window as any).__cfTurnstileToken,
         { timeout: 25000, polling: 500 }
       ).then(h => h.jsonValue() as Promise<string>)
       .catch(async () => {
-        // Method 3: try window.turnstile.getResponse() directly
+        // Try window.turnstile.getResponse() directly as last resort
         return page.evaluate(() => {
-          const t = (window as any).turnstile || (window as any)._turnstile;
+          const t = (window as any).turnstile;
           if (!t) return null;
-          // Try without widgetId (implicit)
           try { const r = t.getResponse(); if (r) return r; } catch(e) {}
-          // Try all widget containers
           const widgets = document.querySelectorAll('[id^="cf-chl-widget"]');
           for (const w of widgets) {
             try { const r = t.getResponse(w.id); if (r) return r; } catch(e) {}
@@ -426,11 +429,11 @@ class SunoApi {
       });
 
       if (token) {
-        logger.info('Cloudflare Turnstile token obtained successfully!');
+        logger.info('Cloudflare Turnstile token obtained via browser!');
         return token as string;
       }
 
-      logger.warn('Could not obtain Turnstile token from browser');
+      logger.warn('Could not obtain Turnstile token (tried 2captcha and browser)');
       return null;
     } catch(e: any) {
       logger.error('getCaptcha browser error: ' + e.message);
