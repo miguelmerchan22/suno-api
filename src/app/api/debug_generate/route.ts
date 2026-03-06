@@ -2,7 +2,6 @@ import { NextResponse, NextRequest } from "next/server";
 import { corsHeaders } from "@/lib/utils";
 import axios from 'axios';
 import * as cookie from 'cookie';
-import { Solver } from '@2captcha/captcha-solver';
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -42,59 +41,102 @@ export async function GET(req: NextRequest) {
     result.twocaptchaKey = twocaptchaKey ? `SET (len=${twocaptchaKey.length})` : 'NOT SET';
 
     if (twocaptchaKey && twocaptchaKey.trim() && twocaptchaKey !== 'undefined') {
-      result.steps.push(`${ms()} solving hCaptcha via 2captcha...`);
+      // Use direct API calls (not SDK) to see raw responses
+      result.steps.push(`${ms()} checking 2captcha balance...`);
       try {
-        const solver = new Solver(twocaptchaKey);
-        const solved = await solver.hcaptcha({
-          pageurl: 'https://suno.com/create',
-          sitekey: HCAPTCHA_SITEKEY
-        });
-        const token = solved?.data;
-        result.hcaptchaToken = token ? token.substring(0, 60) + '...' : null;
-        result.steps.push(`${ms()} 2captcha solved! token=${token ? token.substring(0, 30) + '...' : 'null'}`);
+        const balResp = await axios.get(
+          `https://api.2captcha.com/getBalance`,
+          { params: { key: twocaptchaKey }, timeout: 8000 }
+        );
+        result.balance = balResp.data;
+        result.steps.push(`${ms()} balance: ${JSON.stringify(balResp.data)}`);
+      } catch(e: any) {
+        result.steps.push(`${ms()} balance err: ${e.message}`);
+      }
 
-        if (token) {
-          // Step 3: Try generate with real hCaptcha token
-          result.steps.push(`${ms()} calling generate/v2 with real token...`);
-          try {
-            const genResp = await axios.post(
-              `${SUNO_BASE_URL}/api/generate/v2/`,
-              {
-                prompt: '',
-                gpt_description_prompt: 'a happy upbeat test song',
-                make_instrumental: false,
-                mv: 'chirp-crow',
-                generation_type: 'TEXT',
-                token: token
-              },
-              {
-                headers: {
-                  Authorization: `Bearer ${jwt}`,
-                  Cookie: `__session=${jwt}; __client=${clientToken}`,
-                  'Content-Type': 'application/json',
-                  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-                  'x-suno-client': 'Android prerelease-4nt180t 1.0.42'
-                },
-                timeout: 10000
-              }
+      result.steps.push(`${ms()} creating 2captcha hCaptcha task...`);
+      try {
+        const createResp = await axios.post(
+          'https://api.2captcha.com/createTask',
+          {
+            clientKey: twocaptchaKey,
+            task: {
+              type: 'HCaptchaTaskProxyless',
+              websiteURL: 'https://suno.com/create',
+              websiteKey: HCAPTCHA_SITEKEY,
+              isInvisible: true
+            }
+          },
+          { timeout: 10000 }
+        );
+        result.createTask = createResp.data;
+        result.steps.push(`${ms()} createTask: ${JSON.stringify(createResp.data)}`);
+        const taskId = createResp.data?.taskId;
+
+        if (taskId && createResp.data?.errorId === 0) {
+          result.steps.push(`${ms()} polling for result (taskId=${taskId})...`);
+          let token: string | null = null;
+          for (let i = 0; i < 20; i++) {
+            await new Promise(r => setTimeout(r, 3000));
+            const pollResp = await axios.post('https://api.2captcha.com/getTaskResult',
+              { clientKey: twocaptchaKey, taskId },
+              { timeout: 8000 }
             );
-            result.generateSuccess = true;
-            result.generateStatus = genResp.status;
-            result.generateClips = genResp.data?.clips?.length;
-            result.steps.push(`${ms()} GENERATE SUCCESS! status=${genResp.status} clips=${genResp.data?.clips?.length}`);
-          } catch(e: any) {
-            result.generateSuccess = false;
-            result.generateStatus = e.response?.status;
-            result.generateError = e.response?.data;
-            result.steps.push(`${ms()} generate err: ${e.response?.status} ${JSON.stringify(e.response?.data).substring(0, 100)}`);
+            result.steps.push(`${ms()} poll[${i}]: status=${pollResp.data?.status} err=${pollResp.data?.errorId}`);
+            if (pollResp.data?.status === 'ready') {
+              token = pollResp.data?.solution?.gRecaptchaResponse;
+              result.hcaptchaToken = token ? token.substring(0, 60) + '...' : null;
+              result.steps.push(`${ms()} SOLVED! token=${token ? token.substring(0, 30) + '...' : 'null'}`);
+              break;
+            }
+            if (pollResp.data?.errorId) {
+              result.steps.push(`${ms()} poll error: ${pollResp.data?.errorDescription}`);
+              break;
+            }
+          }
+
+          if (token) {
+            result.steps.push(`${ms()} calling generate/v2 with hCaptcha token...`);
+            try {
+              const genResp = await axios.post(
+                `${SUNO_BASE_URL}/api/generate/v2/`,
+                {
+                  prompt: '',
+                  gpt_description_prompt: 'a happy upbeat test song',
+                  make_instrumental: false,
+                  mv: 'chirp-crow',
+                  generation_type: 'TEXT',
+                  token: token
+                },
+                {
+                  headers: {
+                    Authorization: `Bearer ${jwt}`,
+                    Cookie: `__session=${jwt}; __client=${clientToken}`,
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                    'x-suno-client': 'Android prerelease-4nt180t 1.0.42'
+                  },
+                  timeout: 10000
+                }
+              );
+              result.generateSuccess = true;
+              result.generateStatus = genResp.status;
+              result.generateClips = genResp.data?.clips?.length;
+              result.steps.push(`${ms()} *** GENERATE SUCCESS! clips=${genResp.data?.clips?.length} ***`);
+            } catch(e: any) {
+              result.generateSuccess = false;
+              result.generateStatus = e.response?.status;
+              result.generateError = e.response?.data;
+              result.steps.push(`${ms()} generate err: ${e.response?.status} ${JSON.stringify(e.response?.data).substring(0, 100)}`);
+            }
           }
         }
       } catch(e: any) {
-        result.twocaptchaError = e.message;
-        result.steps.push(`${ms()} 2captcha err: ${e.message.substring(0, 100)}`);
+        result.twocaptchaError = e.response?.data || e.message;
+        result.steps.push(`${ms()} 2captcha err: ${JSON.stringify(e.response?.data || e.message).substring(0, 100)}`);
       }
     } else {
-      result.steps.push(`${ms()} TWOCAPTCHA_KEY not set — add it in Render environment`);
+      result.steps.push(`${ms()} TWOCAPTCHA_KEY not set`);
     }
 
     result.totalMs = Date.now() - t0;
