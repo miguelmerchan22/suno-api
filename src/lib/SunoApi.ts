@@ -360,19 +360,22 @@ class SunoApi {
       logger.warn('captchaRequired check failed, proceeding: ' + e.message);
     }
 
-    // Method 1a: Use CapSolver service if CAPSOLVER_KEY is configured (free trial available at capsolver.com)
+    // Suno uses hCaptcha (invisible, size:"invisible") for song generation.
+    // The hCaptcha sitekey d65453de-3f1a-4aac-9366-a0f06e52b2ce was confirmed
+    // directly from Suno's frontend JS bundle (02c98069b288e4a1.js).
+    const HCAPTCHA_SITEKEY = 'd65453de-3f1a-4aac-9366-a0f06e52b2ce';
+
+    // Method 1a: Use CapSolver service if CAPSOLVER_KEY is configured
     const capsolverKey = process.env.CAPSOLVER_KEY;
     if (capsolverKey && capsolverKey.trim() && capsolverKey !== 'undefined') {
-      logger.info('Solving Cloudflare Turnstile via CapSolver...');
+      logger.info('Solving hCaptcha via CapSolver...');
       try {
         const createRes = await axios.post('https://api.capsolver.com/createTask', {
           clientKey: capsolverKey,
           task: {
-            type: 'AntiTurnstileTaskProxyLess',
+            type: 'HCaptchaTaskProxyLess',
             websiteURL: 'https://suno.com/create',
-            // Use the AUTH site key (not the general key) - confirmed from Suno's JS bundle
-            // CLOUDFLARE_TURNSTILE_SITE_KEY_AUTH is used for song generation
-            websiteKey: '0x4AAAAAABtnpJo7aKMs9JLQ'
+            websiteKey: HCAPTCHA_SITEKEY
           }
         });
         const taskId = createRes.data?.taskId;
@@ -384,9 +387,10 @@ class SunoApi {
               clientKey: capsolverKey,
               taskId
             });
-            if (resultRes.data?.status === 'ready' && resultRes.data?.solution?.token) {
-              logger.info('Turnstile solved via CapSolver!');
-              return resultRes.data.solution.token;
+            // hCaptcha solution is in gRecaptchaResponse (CapSolver naming convention)
+            if (resultRes.data?.status === 'ready' && resultRes.data?.solution?.gRecaptchaResponse) {
+              logger.info('hCaptcha solved via CapSolver!');
+              return resultRes.data.solution.gRecaptchaResponse;
             }
           }
         }
@@ -398,14 +402,14 @@ class SunoApi {
     // Method 1b: Use 2captcha service if TWOCAPTCHA_KEY is configured
     const twocaptchaKey = process.env.TWOCAPTCHA_KEY;
     if (twocaptchaKey && twocaptchaKey.trim() && twocaptchaKey !== 'undefined') {
-      logger.info('Solving Cloudflare Turnstile via 2captcha service...');
+      logger.info('Solving hCaptcha via 2captcha service...');
       try {
-        const result = await this.solver.cloudflareTurnstile({
+        const result = await this.solver.hcaptcha({
           pageurl: 'https://suno.com/create',
-          sitekey: '0x4AAAAAABtnpJo7aKMs9JLQ'  // AUTH site key for song generation
+          sitekey: HCAPTCHA_SITEKEY
         });
         if (result && result.data) {
-          logger.info('Turnstile solved via 2captcha!');
+          logger.info('hCaptcha solved via 2captcha!');
           return result.data;
         }
       } catch(e: any) {

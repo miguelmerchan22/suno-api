@@ -69,17 +69,18 @@ export async function GET(req: NextRequest) {
     let captchaToken: string | null = null;
     if (CAPSOLVER_KEY) {
       try {
+        // hCaptcha sitekey confirmed from Suno's JS bundle (not Cloudflare Turnstile!)
         const csResp = await axios.post('https://api.capsolver.com/createTask', {
           clientKey: CAPSOLVER_KEY,
-          task: { type: 'AntiTurnstileTaskProxyLess', websiteURL: 'https://suno.com/create', websiteKey: '0x4AAAAAABtnpJo7aKMs9JLQ' }
+          task: { type: 'HCaptchaTaskProxyLess', websiteURL: 'https://suno.com/create', websiteKey: 'd65453de-3f1a-4aac-9366-a0f06e52b2ce' }
         });
         const taskId = csResp.data?.taskId;
         for (let i = 0; i < 15; i++) {
           await new Promise(r => setTimeout(r, 2000));
           const poll = await axios.post('https://api.capsolver.com/getTaskResult', { clientKey: CAPSOLVER_KEY, taskId });
-          if (poll.data?.status === 'ready' && poll.data?.solution?.token) {
-            captchaToken = poll.data.solution.token;
-            result.steps.push('CapSolver solved: ' + captchaToken!.substring(0, 30) + '...');
+          if (poll.data?.status === 'ready' && poll.data?.solution?.gRecaptchaResponse) {
+            captchaToken = poll.data.solution.gRecaptchaResponse;
+            result.steps.push('hCaptcha solved via CapSolver: ' + captchaToken!.substring(0, 30) + '...');
             break;
           }
         }
