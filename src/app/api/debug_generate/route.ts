@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const HCAPTCHA_SITEKEY = 'd65453de-3f1a-4aac-9366-a0f06e52b2ce';
   const t0 = Date.now();
   const ms = () => `+${Date.now() - t0}ms`;
-  const result: any = { steps: [] };
+  const result: any = { version: 'v6-capsolver', steps: [] };
 
   try {
     // Step 1: Auth
