@@ -365,38 +365,57 @@ class SunoApi {
     // directly from Suno's frontend JS bundle (02c98069b288e4a1.js).
     const HCAPTCHA_SITEKEY = 'd65453de-3f1a-4aac-9366-a0f06e52b2ce';
 
-    // Method 1a: Use CapSolver service if CAPSOLVER_KEY is configured
+    // Method 1a: Use CapSolver service if CAPSOLVER_KEY is configured.
+    // Try task types in order: Enterprise (Suno may use hCaptcha Enterprise),
+    // then standard ProxyLess, then Turbo.
     const capsolverKey = process.env.CAPSOLVER_KEY;
     if (capsolverKey && capsolverKey.trim() && capsolverKey !== 'undefined') {
-      logger.info('Solving hCaptcha via CapSolver...');
-      try {
-        const createRes = await axios.post('https://api.capsolver.com/createTask', {
-          clientKey: capsolverKey,
-          task: {
-            type: 'HCaptchaTaskProxyLess',
-            websiteURL: 'https://suno.com/create',
-            websiteKey: HCAPTCHA_SITEKEY
+      const capsolverTypes = [
+        'HCaptchaEnterpriseTaskProxyLess',
+        'HCaptchaTaskProxyLess',
+        'HCaptchaTurboTask',
+      ];
+      for (const taskType of capsolverTypes) {
+        logger.info(`Trying CapSolver taskType=${taskType}...`);
+        try {
+          const createRes = await axios.post('https://api.capsolver.com/createTask', {
+            clientKey: capsolverKey,
+            task: {
+              type: taskType,
+              websiteURL: 'https://suno.com/create',
+              websiteKey: HCAPTCHA_SITEKEY,
+              isInvisible: true
+            }
+          });
+          const taskId = createRes.data?.taskId;
+          const createErr = createRes.data?.errorDescription;
+          if (createErr) {
+            logger.warn(`CapSolver ${taskType} createTask err: ${createErr}`);
+            continue; // try next type
           }
-        });
-        const taskId = createRes.data?.taskId;
-        if (taskId) {
-          // Poll for result (up to 30s)
-          for (let i = 0; i < 15; i++) {
-            await new Promise(r => setTimeout(r, 2000));
-            const resultRes = await axios.post('https://api.capsolver.com/getTaskResult', {
-              clientKey: capsolverKey,
-              taskId
-            });
-            // hCaptcha solution is in gRecaptchaResponse (CapSolver naming convention)
-            if (resultRes.data?.status === 'ready' && resultRes.data?.solution?.gRecaptchaResponse) {
-              logger.info('hCaptcha solved via CapSolver!');
-              return resultRes.data.solution.gRecaptchaResponse;
+          if (taskId) {
+            // Poll for result (up to 30s)
+            for (let i = 0; i < 15; i++) {
+              await new Promise(r => setTimeout(r, 2000));
+              const resultRes = await axios.post('https://api.capsolver.com/getTaskResult', {
+                clientKey: capsolverKey,
+                taskId
+              });
+              if (resultRes.data?.status === 'ready' && resultRes.data?.solution?.gRecaptchaResponse) {
+                logger.info(`hCaptcha solved via CapSolver (${taskType})!`);
+                return resultRes.data.solution.gRecaptchaResponse;
+              }
+              if (resultRes.data?.errorId) {
+                logger.warn(`CapSolver ${taskType} poll err: ${resultRes.data?.errorDescription}`);
+                break; // try next type
+              }
             }
           }
+        } catch(e: any) {
+          logger.warn(`CapSolver ${taskType} exception: ${e.response?.data?.errorDescription || e.message}`);
         }
-      } catch(e: any) {
-        logger.error('CapSolver failed: ' + e.message);
       }
+      logger.error('All CapSolver task types failed for hCaptcha');
     }
 
     // Method 1b: Use 2captcha service if TWOCAPTCHA_KEY is configured
