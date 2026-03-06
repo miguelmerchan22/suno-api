@@ -68,23 +68,32 @@ export async function GET(req: NextRequest) {
     // Solve captcha once (reuse for all tests)
     let captchaToken: string | null = null;
     if (CAPSOLVER_KEY) {
-      try {
-        // hCaptcha sitekey confirmed from Suno's JS bundle (not Cloudflare Turnstile!)
-        const csResp = await axios.post('https://api.capsolver.com/createTask', {
-          clientKey: CAPSOLVER_KEY,
-          task: { type: 'HCaptchaTaskProxyLess', websiteURL: 'https://suno.com/create', websiteKey: 'd65453de-3f1a-4aac-9366-a0f06e52b2ce' }
-        });
-        const taskId = csResp.data?.taskId;
-        for (let i = 0; i < 15; i++) {
-          await new Promise(r => setTimeout(r, 2000));
-          const poll = await axios.post('https://api.capsolver.com/getTaskResult', { clientKey: CAPSOLVER_KEY, taskId });
-          if (poll.data?.status === 'ready' && poll.data?.solution?.gRecaptchaResponse) {
-            captchaToken = poll.data.solution.gRecaptchaResponse;
-            result.steps.push('hCaptcha solved via CapSolver: ' + captchaToken!.substring(0, 30) + '...');
-            break;
+      // Try both task type names in case one isn't supported
+      for (const taskType of ['HCaptchaTaskProxyLess', 'HCaptchaTask']) {
+        try {
+          const csResp = await axios.post('https://api.capsolver.com/createTask', {
+            clientKey: CAPSOLVER_KEY,
+            task: { type: taskType, websiteURL: 'https://suno.com/create', websiteKey: 'd65453de-3f1a-4aac-9366-a0f06e52b2ce' }
+          });
+          result.steps.push('CapSolver ' + taskType + ' response: ' + JSON.stringify(csResp.data));
+          const taskId = csResp.data?.taskId;
+          if (!taskId) { result.steps.push(taskType + ' no taskId, skipping'); continue; }
+          for (let i = 0; i < 15; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            const poll = await axios.post('https://api.capsolver.com/getTaskResult', { clientKey: CAPSOLVER_KEY, taskId });
+            const sol = poll.data?.solution;
+            const token = sol?.gRecaptchaResponse || sol?.token || sol?.answer;
+            if (poll.data?.status === 'ready' && token) {
+              captchaToken = token;
+              result.steps.push('hCaptcha solved (' + taskType + '): ' + captchaToken!.substring(0, 30) + '...');
+              break;
+            }
           }
+          if (captchaToken) break;
+        } catch(e: any) {
+          result.steps.push(taskType + ' error: ' + e.message + ' | body: ' + JSON.stringify(e.response?.data));
         }
-      } catch(e: any) { result.steps.push('CapSolver error: ' + e.message); }
+      }
     }
 
     // Helper: test one generate variation
