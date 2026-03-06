@@ -112,20 +112,24 @@ export async function GET(req: NextRequest) {
       });
 
       result.steps.push('navigating to suno.com/create...');
-      await page.goto('https://suno.com/create', { waitUntil: 'networkidle', timeout: 25000 }).catch(() => {});
+      await page.goto('https://suno.com/create', { waitUntil: 'domcontentloaded', timeout: 25000 }).catch((e: any) => result.steps.push('goto warn: ' + e.message));
+      // Wait for redirects to settle
+      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+      await new Promise(r => setTimeout(r, 2000));
+
       const finalUrl = page.url();
-      const pageTitle = await page.title();
+      const pageTitle = await page.title().catch(() => 'error');
       result.pageUrl = finalUrl;
       result.pageTitle = pageTitle;
       result.steps.push('final URL: ' + finalUrl + ' | title: ' + pageTitle);
 
       // Check what elements exist
-      const hasCustomTextarea = await page.locator('.custom-textarea').count();
-      const hasAnyTextarea = await page.locator('textarea').count();
-      const hasCreateBtn = await page.locator('button[aria-label="Create"]').count();
-      const hasLoginBtn = await page.locator('button:has-text("Sign in"), a:has-text("Log in"), [data-testid="login"]').count();
-      result.elements = { hasCustomTextarea, hasAnyTextarea, hasCreateBtn, hasLoginBtn };
-      result.steps.push('elements: textarea=' + hasCustomTextarea + ' anyTextarea=' + hasAnyTextarea + ' createBtn=' + hasCreateBtn + ' loginBtn=' + hasLoginBtn);
+      const hasCustomTextarea = await page.locator('.custom-textarea').count().catch(() => -1);
+      const hasAnyTextarea = await page.locator('textarea').count().catch(() => -1);
+      const hasCreateBtn = await page.locator('button[aria-label="Create"]').count().catch(() => -1);
+      const hasSignIn = await page.locator('text=Sign in').count().catch(() => -1);
+      result.elements = { hasCustomTextarea, hasAnyTextarea, hasCreateBtn, hasSignIn };
+      result.steps.push('elements: .custom-textarea=' + hasCustomTextarea + ' textarea=' + hasAnyTextarea + ' createBtn=' + hasCreateBtn + ' signIn=' + hasSignIn);
 
       // Try clicking create if elements found
       if (hasCustomTextarea > 0 && hasCreateBtn > 0) {
