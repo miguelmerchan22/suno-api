@@ -42,16 +42,30 @@ export async function GET(req: NextRequest) {
 
     if (twocaptchaKey && twocaptchaKey.trim() && twocaptchaKey !== 'undefined') {
       // Use direct API calls (not SDK) to see raw responses
-      result.steps.push(`${ms()} checking 2captcha balance...`);
+      // Try BOTH old API (plain text) and new API (JSON) for balance check
+      result.steps.push(`${ms()} checking 2captcha balance (old API)...`);
       try {
-        const balResp = await axios.get(
-          `https://api.2captcha.com/getBalance`,
-          { params: { key: twocaptchaKey }, timeout: 8000 }
+        const balOld = await axios.get(
+          `https://2captcha.com/res.php`,
+          { params: { key: twocaptchaKey, action: 'getbalance' }, timeout: 8000 }
         );
-        result.balance = balResp.data;
-        result.steps.push(`${ms()} balance: ${JSON.stringify(balResp.data)}`);
+        result.balanceOldApi = balOld.data;
+        result.steps.push(`${ms()} balance (old API): ${JSON.stringify(balOld.data)}`);
       } catch(e: any) {
-        result.steps.push(`${ms()} balance err: ${e.message}`);
+        result.steps.push(`${ms()} balance old API err: ${e.message}`);
+      }
+
+      result.steps.push(`${ms()} checking 2captcha balance (new API)...`);
+      try {
+        const balNew = await axios.post(
+          `https://api.2captcha.com/getBalance`,
+          { clientKey: twocaptchaKey },
+          { timeout: 8000 }
+        );
+        result.balanceNewApi = balNew.data;
+        result.steps.push(`${ms()} balance (new API): ${JSON.stringify(balNew.data)}`);
+      } catch(e: any) {
+        result.steps.push(`${ms()} balance new API err: ${e.message}`);
       }
 
       result.steps.push(`${ms()} creating 2captcha hCaptcha task...`);
