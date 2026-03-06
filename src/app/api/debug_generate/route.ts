@@ -32,13 +32,30 @@ export async function GET(req: NextRequest) {
     const clientToken = cookies['__client'];
     result.hasClientToken = !!clientToken;
 
-    // Step 2: Get session ID
+    // Step 2: Get session ID - plain axios (no Android headers)
     const sessionResp = await axios.get(
       `${CLERK_BASE_URL}/v1/client?_is_native=true&_clerk_js_version=${CLERK_VERSION}`,
       { headers: { Authorization: clientToken } }
     );
     const sid = sessionResp.data?.response?.last_active_session_id;
-    result.steps.push('session: ' + (sid ? sid.substring(0, 24) + '...' : 'NOT FOUND'));
+    result.steps.push('plain session: ' + (sid ? sid.substring(0, 24) + '...' : 'NOT FOUND'));
+
+    // Step 2b: Same call WITH Android headers (mimics SunoApi.this.client)
+    try {
+      const androidResp = await axios.get(
+        `${CLERK_BASE_URL}/v1/client?_is_native=true&_clerk_js_version=${CLERK_VERSION}`,
+        { headers: {
+            Authorization: clientToken,
+            'x-suno-client': 'Android prerelease-4nt180t 1.0.42',
+            'X-Requested-With': 'com.suno.android',
+            Cookie: `__client=${clientToken}`
+          }}
+      );
+      const sid2 = androidResp.data?.response?.last_active_session_id;
+      result.steps.push('android session: ' + (sid2 ? sid2.substring(0, 24) + '...' : 'NOT FOUND - keys: ' + Object.keys(androidResp.data?.response || {}).join(',')));
+    } catch(e: any) {
+      result.steps.push('android headers failed: ' + e.response?.status + ' ' + JSON.stringify(e.response?.data));
+    }
 
     // Step 3a: JWT via _is_native=true (current method)
     const renewResp = await axios.post(
