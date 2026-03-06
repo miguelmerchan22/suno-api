@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { corsHeaders } from "@/lib/utils";
 import axios from 'axios';
 import * as cookie from 'cookie';
+import { chromium } from 'rebrowser-playwright-core';
 
 // Debug endpoint - isolate "Token validation failed." root cause
 export const maxDuration = 60;
@@ -155,6 +156,55 @@ export async function GET(req: NextRequest) {
         result['E_v2web_withToken'] = { ok: false, status: e.response?.status, error: e.response?.data };
         result.steps.push('E_v2web_withToken → ' + e.response?.status + ': ' + JSON.stringify(e.response?.data));
       }
+    }
+
+    // Test browser launch + navigate to suno.com/create
+    try {
+      result.steps.push('launching Chromium...');
+      const browser = await chromium.launch({
+        args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--enable-unsafe-swiftshader'],
+        headless: true
+      });
+      result.steps.push('Chromium launched OK');
+      const ctx = await browser.newContext();
+      // load cookies
+      await ctx.addCookies([
+        { name: '__client', value: cookies['__client'] || '', domain: '.suno.com', path: '/' },
+        { name: '__session', value: jwtNative || '', domain: '.suno.com', path: '/' }
+      ]);
+      const page = await ctx.newPage();
+
+      // Intercept generate/v2 request
+      let interceptedToken: string | null = null;
+      const captureP = new Promise<void>((res) => {
+        page.route('**/api/generate/v2/**', async (route) => {
+          try { interceptedToken = route.request().postDataJSON()?.token || 'EMPTY'; } catch(e) { interceptedToken = 'PARSE_ERROR'; }
+          route.abort();
+          res();
+        });
+      });
+
+      result.steps.push('navigating to suno.com/create...');
+      await page.goto('https://suno.com/create', { waitUntil: 'domcontentloaded', timeout: 20000 });
+      result.steps.push('page loaded, waiting for interface...');
+
+      // Wait for project API (interface ready)
+      await page.waitForResponse('**/api/project/**', { timeout: 15000 }).catch(() => result.steps.push('project API wait timed out'));
+      result.steps.push('interface ready, clicking create...');
+
+      try { await page.getByLabel('Close').click({ timeout: 1500 }); } catch(e) {}
+      const ta = page.locator('.custom-textarea');
+      await ta.click();
+      await ta.pressSequentially('test', { delay: 50 });
+      page.locator('button[aria-label="Create"] div.flex').click().catch(() => {});
+
+      await Promise.race([captureP, new Promise(r => setTimeout(r, 15000))]);
+      result.browserToken = interceptedToken;
+      const tok = interceptedToken as string | null;
+      result.steps.push('browser token: ' + (tok ? tok.substring(0, 30) + '...' : 'null'));
+      await browser.close();
+    } catch(e: any) {
+      result.steps.push('browser test error: ' + e.message);
     }
 
     return new NextResponse(JSON.stringify(result, null, 2), {
