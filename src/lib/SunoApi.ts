@@ -362,7 +362,9 @@ class SunoApi {
           task: {
             type: 'AntiTurnstileTaskProxyLess',
             websiteURL: 'https://suno.com/create',
-            websiteKey: '0x4AAAAAABd64Cd9aq5C--VE'
+            // Use the AUTH site key (not the general key) - confirmed from Suno's JS bundle
+            // CLOUDFLARE_TURNSTILE_SITE_KEY_AUTH is used for song generation
+            websiteKey: '0x4AAAAAABtnpJo7aKMs9JLQ'
           }
         });
         const taskId = createRes.data?.taskId;
@@ -392,7 +394,7 @@ class SunoApi {
       try {
         const result = await this.solver.cloudflareTurnstile({
           pageurl: 'https://suno.com/create',
-          sitekey: '0x4AAAAAABd64Cd9aq5C--VE'
+          sitekey: '0x4AAAAAABtnpJo7aKMs9JLQ'  // AUTH site key for song generation
         });
         if (result && result.data) {
           logger.info('Turnstile solved via 2captcha!');
