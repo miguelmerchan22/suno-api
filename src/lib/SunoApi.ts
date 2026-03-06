@@ -417,70 +417,70 @@ class SunoApi {
       }
     }
 
-    // Method 2: Use headless browser (requires Playwright + system deps on server)
-    logger.info('Solving Cloudflare Turnstile via headless browser...');
+    // Method 2: Use headless browser — navigate to suno.com/create, trigger
+    // the Create button, and intercept the actual /api/generate/v2/ request
+    // that the browser makes. The hCaptcha token (invisible widget) is included
+    // in that request's POST body. This mirrors exactly what gcui-art/suno-api does.
+    logger.info('Solving hCaptcha via headless browser (intercepting generate request)...');
     let context: BrowserContext | null = null;
     try {
       context = await this.launchBrowser();
       const page = await context.newPage();
 
-      // Inject script BEFORE page loads to intercept Turnstile token
-      await page.addInitScript(() => {
-        (window as any).__cfTurnstileToken = null;
-
-        // Intercept window.turnstile assignment to wrap render callback
-        let _turnstile: any = null;
-        Object.defineProperty(window, 'turnstile', {
-          get: () => _turnstile,
-          set: (val: any) => {
-            _turnstile = val;
-            if (val && typeof val.render === 'function') {
-              const origRender = val.render.bind(val);
-              val.render = function(container: any, params: any = {}) {
-                const origCb = params.callback;
-                params.callback = (token: string) => {
-                  (window as any).__cfTurnstileToken = token;
-                  if (origCb) origCb(token);
-                };
-                return origRender(container, params);
-              };
+      // Intercept the generate/v2 request — capture token + refresh JWT
+      const capturePromise = new Promise<string>((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('timeout waiting for generate/v2 request')), 55000);
+        page.route('**/api/generate/v2/**', async (route) => {
+          clearTimeout(t);
+          try {
+            const request = route.request();
+            // Grab fresh JWT from the browser's actual Authorization header
+            const authHeader = request.headers()['authorization'];
+            if (authHeader) {
+              const jwt = authHeader.split('Bearer ').pop();
+              if (jwt) this.currentToken = jwt;
             }
-          },
-          configurable: true
+            const captchaToken = request.postDataJSON()?.token || '';
+            logger.info('hCaptcha token captured from browser request');
+            route.abort(); // no need to actually submit
+            resolve(captchaToken);
+          } catch(e) { reject(e); }
         });
       });
 
-      // Navigate to the create page (Turnstile runs automatically on load)
+      logger.info('Navigating to suno.com/create...');
       await page.goto('https://suno.com/create', {
+        referer: 'https://www.google.com/',
         waitUntil: 'domcontentloaded',
-        timeout: 30000
+        timeout: 0
       });
 
-      // Wait up to 25 seconds for token
-      const token = await page.waitForFunction(
-        () => (window as any).__cfTurnstileToken,
-        { timeout: 25000, polling: 500 }
-      ).then(h => h.jsonValue() as Promise<string>)
-      .catch(async () => {
-        // Try window.turnstile.getResponse() directly as last resort
-        return page.evaluate(() => {
-          const t = (window as any).turnstile;
-          if (!t) return null;
-          try { const r = t.getResponse(); if (r) return r; } catch(e) {}
-          const widgets = document.querySelectorAll('[id^="cf-chl-widget"]');
-          for (const w of widgets) {
-            try { const r = t.getResponse(w.id); if (r) return r; } catch(e) {}
-          }
-          return null;
-        });
-      });
+      // Wait for Suno's React app to finish loading the song list
+      logger.info('Waiting for Suno interface to load...');
+      await page.waitForResponse('**/api/project/**', { timeout: 30000 });
 
+      if (this.ghostCursorEnabled)
+        this.cursor = await createCursor(page);
+
+      logger.info('Triggering the hCaptcha...');
+      try {
+        await page.getByLabel('Close').click({ timeout: 2000 });
+      } catch(e) {} // dismiss any popup
+
+      const textarea = page.locator('.custom-textarea');
+      await this.click(textarea);
+      await textarea.pressSequentially('Lorem ipsum', { delay: 80 });
+
+      const button = page.locator('button[aria-label="Create"]').locator('div.flex');
+      this.click(button); // intentionally not awaited — intercept fires before response
+
+      const token = await capturePromise;
       if (token) {
-        logger.info('Cloudflare Turnstile token obtained via browser!');
-        return token as string;
+        logger.info('hCaptcha token obtained via browser!');
+        return token;
       }
 
-      logger.warn('Could not obtain Turnstile token (tried 2captcha and browser)');
+      logger.warn('Browser intercepted generate request but token was empty');
       return null;
     } catch(e: any) {
       logger.error('getCaptcha browser error: ' + e.message);
