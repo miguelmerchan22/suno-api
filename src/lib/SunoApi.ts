@@ -608,13 +608,11 @@ class SunoApi {
     continue_at?: number
   ): Promise<AudioInfo[]> {
     await this.keepAlive();
-    // Native v2 endpoint uses Android client headers and doesn't require Turnstile CAPTCHA.
-    // Turnstile is only needed for the v2-web browser endpoint which we're not using.
-    // const captchaToken = await this.getCaptcha();
 
-    // ÁîüÊàê session tokenÔºàÊ®°ÊãüÊµèËßàÂô®Ë°å‰∏∫Ôºâ
-    const createSessionToken = randomUUID();
-
+    // Use the original simple payload format (gcui-art/suno-api).
+    // The extra fields that were added (metadata.create_session_token,
+    // transaction_uuid, user_uploaded_images_b64, etc.) caused
+    // "Token validation failed" on the native v2 endpoint.
     const payload: any = {
       make_instrumental: make_instrumental,
       mv: model || DEFAULT_MODEL,
@@ -623,30 +621,8 @@ class SunoApi {
       continue_at: continue_at,
       continue_clip_id: continue_clip_id,
       task: task,
-      // Ê∑ªÂä† metadata Â≠óÊÆµÔºåÊ®°ÊãüÊµèËßàÂô®ËØ∑Ê±Ç
-      metadata: {
-        web_client_pathname: '/create',
-        is_max_mode: false,
-        is_mumble: false,
-        create_mode: 'custom',
-        create_session_token: createSessionToken,
-        disable_volume_normalization: false,
-        can_control_sliders: ['weirdness_constraint', 'style_weight']
-      },
-      // ÂÖ∂‰ªñÊµèËßàÂô®ÂèëÈÄÅÁöÑÂ≠óÊÆµ
-      user_uploaded_images_b64: null,
-      override_fields: [],
-      cover_clip_id: null,
-      cover_start_s: null,
-      cover_end_s: null,
-      persona_id: null,
-      artist_clip_id: null,
-      artist_start_s: null,
-      artist_end_s: null,
-      continued_aligned_prompt: null,
-      transaction_uuid: randomUUID()
+      token: await this.getCaptcha()
     };
-    // No token field needed for native v2 endpoint
     if (isCustom) {
       payload.tags = tags;
       payload.title = title;
