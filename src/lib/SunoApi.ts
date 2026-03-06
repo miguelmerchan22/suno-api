@@ -125,13 +125,13 @@ class SunoApi {
       // AND as a __session cookie. We mirror that behaviour here so the backend
       // can validate the token via either mechanism (the token field in the JSON
       // payload is the Turnstile captcha token, not the session JWT).
-      const cookiesMap: Record<string, string> = { ...this.cookies };
+      const cookiesMap: Record<string, string | undefined> = { ...this.cookies };
       if (this.currentToken) {
         cookiesMap['__session'] = this.currentToken;
       }
-      const cookiesArray = Object.entries(cookiesMap).map(([key, value]) =>
-        cookie.serialize(key, value as string)
-      );
+      const cookiesArray = Object.entries(cookiesMap)
+        .filter((entry): entry is [string, string] => entry[1] !== undefined)
+        .map(([key, value]) => cookie.serialize(key, value));
       config.headers.Cookie = cookiesArray.join('; ');
       return config;
     });
