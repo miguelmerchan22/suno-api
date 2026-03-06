@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { corsHeaders } from "@/lib/utils";
 import axios from 'axios';
 import * as cookie from 'cookie';
+import { Solver } from '@2captcha/captcha-solver';
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
   const HCAPTCHA_SITEKEY = 'd65453de-3f1a-4aac-9366-a0f06e52b2ce';
   const t0 = Date.now();
   const ms = () => `+${Date.now() - t0}ms`;
-  const result: any = { version: 'v6-capsolver', steps: [] };
+  const result: any = { version: 'v7-2captcha', steps: [] };
 
   try {
     // Step 1: Auth
@@ -36,66 +37,64 @@ export async function GET(req: NextRequest) {
     result.steps.push(`${ms()} JWT: ${jwt ? 'OK' : 'FAILED'}`);
     if (!jwt) throw new Error('No JWT');
 
-    // Step 2: Test ALL CapSolver task types
-    const capsolverKey = process.env.CAPSOLVER_KEY;
-    result.capsolverKey = capsolverKey ? 'SET (len=' + capsolverKey.length + ')' : 'NOT SET';
-    result.capsolver = {};
+    // Step 2: Test 2captcha hCaptcha solving
+    const twocaptchaKey = process.env.TWOCAPTCHA_KEY;
+    result.twocaptchaKey = twocaptchaKey ? `SET (len=${twocaptchaKey.length})` : 'NOT SET';
 
-    if (capsolverKey && capsolverKey.trim()) {
-      const taskTypes = [
-        'HCaptchaEnterpriseTaskProxyLess',
-        'HCaptchaTaskProxyLess',
-        'HCaptchaTurboTask',
-      ];
+    if (twocaptchaKey && twocaptchaKey.trim() && twocaptchaKey !== 'undefined') {
+      result.steps.push(`${ms()} solving hCaptcha via 2captcha...`);
+      try {
+        const solver = new Solver(twocaptchaKey);
+        const solved = await solver.hcaptcha({
+          pageurl: 'https://suno.com/create',
+          sitekey: HCAPTCHA_SITEKEY
+        });
+        const token = solved?.data;
+        result.hcaptchaToken = token ? token.substring(0, 60) + '...' : null;
+        result.steps.push(`${ms()} 2captcha solved! token=${token ? token.substring(0, 30) + '...' : 'null'}`);
 
-      for (const taskType of taskTypes) {
-        result.steps.push(`${ms()} trying CapSolver ${taskType}...`);
-        try {
-          const createRes = await axios.post('https://api.capsolver.com/createTask', {
-            clientKey: capsolverKey,
-            task: {
-              type: taskType,
-              websiteURL: 'https://suno.com/create',
-              websiteKey: HCAPTCHA_SITEKEY,
-              isInvisible: true
-            }
-          }, { timeout: 10000 });
-
-          result.capsolver[taskType] = {
-            httpStatus: 200,
-            body: createRes.data
-          };
-          result.steps.push(`${ms()} ${taskType} → errorId=${createRes.data?.errorId} taskId=${createRes.data?.taskId} err=${createRes.data?.errorDescription}`);
-          // Don't poll - just capture the create response to see what's supported
-        } catch(e: any) {
-          result.capsolver[taskType] = {
-            httpStatus: e.response?.status,
-            body: e.response?.data,
-            exception: e.message.substring(0, 100)
-          };
-          result.steps.push(`${ms()} ${taskType} HTTP ${e.response?.status}: ${JSON.stringify(e.response?.data).substring(0, 80)}`);
+        if (token) {
+          // Step 3: Try generate with real hCaptcha token
+          result.steps.push(`${ms()} calling generate/v2 with real token...`);
+          try {
+            const genResp = await axios.post(
+              `${SUNO_BASE_URL}/api/generate/v2/`,
+              {
+                prompt: '',
+                gpt_description_prompt: 'a happy upbeat test song',
+                make_instrumental: false,
+                mv: 'chirp-crow',
+                generation_type: 'TEXT',
+                token: token
+              },
+              {
+                headers: {
+                  Authorization: `Bearer ${jwt}`,
+                  Cookie: `__session=${jwt}; __client=${clientToken}`,
+                  'Content-Type': 'application/json',
+                  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                  'x-suno-client': 'Android prerelease-4nt180t 1.0.42'
+                },
+                timeout: 10000
+              }
+            );
+            result.generateSuccess = true;
+            result.generateStatus = genResp.status;
+            result.generateClips = genResp.data?.clips?.length;
+            result.steps.push(`${ms()} GENERATE SUCCESS! status=${genResp.status} clips=${genResp.data?.clips?.length}`);
+          } catch(e: any) {
+            result.generateSuccess = false;
+            result.generateStatus = e.response?.status;
+            result.generateError = e.response?.data;
+            result.steps.push(`${ms()} generate err: ${e.response?.status} ${JSON.stringify(e.response?.data).substring(0, 100)}`);
+          }
         }
+      } catch(e: any) {
+        result.twocaptchaError = e.message;
+        result.steps.push(`${ms()} 2captcha err: ${e.message.substring(0, 100)}`);
       }
-    }
-
-    // Step 3: Captcha check
-    try {
-      const cResp = await axios.post(
-        `${SUNO_BASE_URL}/api/c/check`,
-        { ctype: 'generation' },
-        {
-          headers: {
-            Authorization: `Bearer ${jwt}`,
-            Cookie: `__session=${jwt}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 8000
-        }
-      );
-      result.captchaRequired = cResp.data?.required;
-      result.steps.push(`${ms()} captcha required=${cResp.data?.required}`);
-    } catch(e: any) {
-      result.steps.push(`${ms()} captcha check err: ${e.response?.status}`);
+    } else {
+      result.steps.push(`${ms()} TWOCAPTCHA_KEY not set — add it in Render environment`);
     }
 
     result.totalMs = Date.now() - t0;
