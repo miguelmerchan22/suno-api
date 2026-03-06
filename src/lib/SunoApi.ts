@@ -608,7 +608,9 @@ class SunoApi {
     continue_at?: number
   ): Promise<AudioInfo[]> {
     await this.keepAlive();
-    const captchaToken = await this.getCaptcha();
+    // Native v2 endpoint uses Android client headers and doesn't require Turnstile CAPTCHA.
+    // Turnstile is only needed for the v2-web browser endpoint which we're not using.
+    // const captchaToken = await this.getCaptcha();
 
     // ÁîüÊàê session tokenÔºàÊ®°ÊãüÊµèËßàÂô®Ë°å‰∏∫Ôºâ
     const createSessionToken = randomUUID();
@@ -644,10 +646,7 @@ class SunoApi {
       continued_aligned_prompt: null,
       transaction_uuid: randomUUID()
     };
-    // Âè™ÊúâÂΩì captcha token Â≠òÂú®Êó∂ÊâçÊ∑ªÂä† token Â≠óÊÆµ
-    if (captchaToken) {
-      payload.token = captchaToken;
-    }
+    // No token field needed for native v2 endpoint
     if (isCustom) {
       payload.tags = tags;
       payload.title = title;
@@ -674,7 +673,7 @@ class SunoApi {
         )
     );
     const response = await this.client.post(
-      `${SunoApi.BASE_URL}/api/generate/v2-web/`,
+      `${SunoApi.BASE_URL}/api/generate/v2/`,
       payload,
       {
         timeout: 10000 // 10 seconds timeout
