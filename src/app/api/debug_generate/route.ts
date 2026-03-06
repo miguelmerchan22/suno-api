@@ -59,12 +59,21 @@ export async function GET(req: NextRequest) {
 
     result.steps.push('navigating...');
     await page.goto('https://suno.com/create', { waitUntil: 'load', timeout: 20000 }).catch((e: any) => result.steps.push('goto: ' + e.message.substring(0, 60)));
+    result.steps.push('after goto: ' + page.url().substring(0, 80));
+
+    // Wait for Clerk handshake to complete — it redirects away from ?__clerk_handshake=...
+    if (page.url().includes('__clerk_handshake')) {
+      result.steps.push('Clerk handshake detected, waiting for redirect...');
+      await page.waitForURL((u: string) => !u.includes('__clerk_handshake'), { timeout: 15000 })
+        .catch((e: any) => result.steps.push('handshake wait error: ' + e.message.substring(0, 60)));
+      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    }
 
     const url = page.url();
     const title = await page.title().catch(() => '?');
-    result.url = url;
+    result.url = url.substring(0, 80);
     result.title = title;
-    result.steps.push('url: ' + url);
+    result.steps.push('final url: ' + url.substring(0, 80));
     result.steps.push('title: ' + title);
 
     // Count key elements

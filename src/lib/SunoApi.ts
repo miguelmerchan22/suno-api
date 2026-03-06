@@ -451,9 +451,17 @@ class SunoApi {
       logger.info('Navigating to suno.com/create...');
       await page.goto('https://suno.com/create', {
         referer: 'https://www.google.com/',
-        waitUntil: 'domcontentloaded',
-        timeout: 0
+        waitUntil: 'load',
+        timeout: 30000
       });
+
+      // Wait for Clerk handshake to complete — it redirects away from ?__clerk_handshake=...
+      if (page.url().includes('__clerk_handshake')) {
+        logger.info('Clerk handshake detected, waiting for redirect...');
+        await page.waitForURL((u: string) => !u.includes('__clerk_handshake'), { timeout: 15000 })
+          .catch((e: any) => logger.warn('handshake wait: ' + e.message));
+        await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+      }
 
       // Wait for Suno's React app to finish loading the song list
       logger.info('Waiting for Suno interface to load...');
