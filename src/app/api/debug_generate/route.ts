@@ -112,20 +112,33 @@ export async function GET(req: NextRequest) {
       });
 
       result.steps.push('navigating to suno.com/create...');
-      await page.goto('https://suno.com/create', { waitUntil: 'domcontentloaded', timeout: 20000 });
-      result.steps.push('page loaded, waiting for interface...');
+      await page.goto('https://suno.com/create', { waitUntil: 'networkidle', timeout: 25000 }).catch(() => {});
+      const finalUrl = page.url();
+      const pageTitle = await page.title();
+      result.pageUrl = finalUrl;
+      result.pageTitle = pageTitle;
+      result.steps.push('final URL: ' + finalUrl + ' | title: ' + pageTitle);
 
-      // Wait for project API (interface ready)
-      await page.waitForResponse('**/api/project/**', { timeout: 15000 }).catch(() => result.steps.push('project API wait timed out'));
-      result.steps.push('interface ready, clicking create...');
+      // Check what elements exist
+      const hasCustomTextarea = await page.locator('.custom-textarea').count();
+      const hasAnyTextarea = await page.locator('textarea').count();
+      const hasCreateBtn = await page.locator('button[aria-label="Create"]').count();
+      const hasLoginBtn = await page.locator('button:has-text("Sign in"), a:has-text("Log in"), [data-testid="login"]').count();
+      result.elements = { hasCustomTextarea, hasAnyTextarea, hasCreateBtn, hasLoginBtn };
+      result.steps.push('elements: textarea=' + hasCustomTextarea + ' anyTextarea=' + hasAnyTextarea + ' createBtn=' + hasCreateBtn + ' loginBtn=' + hasLoginBtn);
 
-      try { await page.getByLabel('Close').click({ timeout: 1500 }); } catch(e) {}
-      const ta = page.locator('.custom-textarea');
-      await ta.click();
-      await ta.pressSequentially('test', { delay: 50 });
-      page.locator('button[aria-label="Create"] div.flex').click().catch(() => {});
+      // Try clicking create if elements found
+      if (hasCustomTextarea > 0 && hasCreateBtn > 0) {
+        try { await page.getByLabel('Close').click({ timeout: 1500 }); } catch(e) {}
+        const ta = page.locator('.custom-textarea').first();
+        await ta.click({ timeout: 5000 });
+        await ta.pressSequentially('test', { delay: 50 });
+        page.locator('button[aria-label="Create"] div.flex').click().catch(() => {});
+        await Promise.race([captureP, new Promise(r => setTimeout(r, 15000))]);
+      } else {
+        result.steps.push('skipping create click - elements not found');
+      }
 
-      await Promise.race([captureP, new Promise(r => setTimeout(r, 15000))]);
       result.browserToken = interceptedToken;
       const tok = interceptedToken as string | null;
       result.steps.push('browser token: ' + (tok ? tok.substring(0, 30) + '...' : 'null'));
