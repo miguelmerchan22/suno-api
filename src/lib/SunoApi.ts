@@ -418,21 +418,44 @@ class SunoApi {
       logger.error('All CapSolver task types failed for hCaptcha');
     }
 
-    // Method 1b: Use 2captcha service if TWOCAPTCHA_KEY is configured
-    const twocaptchaKey = process.env.TWOCAPTCHA_KEY;
-    if (twocaptchaKey && twocaptchaKey.trim() && twocaptchaKey !== 'undefined') {
-      logger.info('Solving hCaptcha via 2captcha service...');
+    // Method 1b: Use anti-captcha.com if ANTICAPTCHA_KEY is configured.
+    // (2captcha dropped hCaptcha support; anti-captcha.com uses identical JSON API)
+    const anticaptchaKey = process.env.ANTICAPTCHA_KEY;
+    if (anticaptchaKey && anticaptchaKey.trim() && anticaptchaKey !== 'undefined') {
+      logger.info('Solving hCaptcha via anti-captcha.com...');
       try {
-        const result = await this.solver.hcaptcha({
-          pageurl: 'https://suno.com/create',
-          sitekey: HCAPTCHA_SITEKEY
+        const createRes = await axios.post('https://api.anti-captcha.com/createTask', {
+          clientKey: anticaptchaKey,
+          task: {
+            type: 'HCaptchaTaskProxyless',
+            websiteURL: 'https://suno.com/create',
+            websiteKey: HCAPTCHA_SITEKEY,
+            isInvisible: true
+          }
         });
-        if (result && result.data) {
-          logger.info('hCaptcha solved via 2captcha!');
-          return result.data;
+        const taskId = createRes.data?.taskId;
+        if (createRes.data?.errorId === 0 && taskId) {
+          logger.info(`anti-captcha.com task created: ${taskId}, polling...`);
+          for (let i = 0; i < 20; i++) {
+            await new Promise(r => setTimeout(r, 3000));
+            const pollRes = await axios.post('https://api.anti-captcha.com/getTaskResult', {
+              clientKey: anticaptchaKey,
+              taskId
+            });
+            if (pollRes.data?.status === 'ready' && pollRes.data?.solution?.gRecaptchaResponse) {
+              logger.info('hCaptcha solved via anti-captcha.com!');
+              return pollRes.data.solution.gRecaptchaResponse;
+            }
+            if (pollRes.data?.errorId) {
+              logger.warn('anti-captcha.com poll error: ' + pollRes.data?.errorDescription);
+              break;
+            }
+          }
+        } else {
+          logger.warn('anti-captcha.com createTask failed: ' + createRes.data?.errorDescription);
         }
       } catch(e: any) {
-        logger.error('2captcha failed: ' + e.message);
+        logger.error('anti-captcha.com failed: ' + e.message);
       }
     }
 
