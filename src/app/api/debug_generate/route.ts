@@ -57,26 +57,36 @@ export async function GET(req: NextRequest) {
       });
     });
 
+    // Navigate - domcontentloaded fires fast (~2-5s), no waiting for all scripts
     result.steps.push('navigating...');
-    await page.goto('https://suno.com/create', { waitUntil: 'load', timeout: 20000 }).catch((e: any) => result.steps.push('goto: ' + e.message.substring(0, 60)));
-    result.steps.push('after goto: ' + page.url().substring(0, 80));
+    await page.goto('https://suno.com/create', {
+      waitUntil: 'domcontentloaded',
+      timeout: 10000
+    }).catch((e: any) => result.steps.push('goto: ' + e.message.substring(0, 60)));
+    result.steps.push('url after goto: ' + page.url().substring(0, 100));
 
-    // Wait for Clerk handshake to complete — it redirects away from ?__clerk_handshake=...
-    if (page.url().includes('__clerk_handshake')) {
-      result.steps.push('Clerk handshake detected, waiting for redirect...');
-      await page.waitForURL((u: string) => !u.includes('__clerk_handshake'), { timeout: 15000 })
-        .catch((e: any) => result.steps.push('handshake wait error: ' + e.message.substring(0, 60)));
-      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
-    }
+    // Wait for the actual create UI to appear — this single wait covers:
+    //   1) Clerk handshake redirect completing
+    //   2) React finishing rendering
+    // Much more efficient than chaining waitForURL + networkidle + sleep
+    result.steps.push('waiting for create UI (.custom-textarea)...');
+    const uiFound = await page.locator('.custom-textarea').waitFor({
+      state: 'visible',
+      timeout: 30000
+    }).then(() => true).catch((e: any) => {
+      result.steps.push('waitFor(.custom-textarea) err: ' + e.message.substring(0, 80));
+      return false;
+    });
 
     const url = page.url();
     const title = await page.title().catch(() => '?');
-    result.url = url.substring(0, 80);
+    result.url = url.substring(0, 100);
     result.title = title;
-    result.steps.push('final url: ' + url.substring(0, 80));
+    result.steps.push('final url: ' + url.substring(0, 100));
     result.steps.push('title: ' + title);
+    result.uiFound = uiFound;
 
-    // Count key elements
+    // Count key elements regardless (to see what IS on the page)
     const counts: any = {};
     for (const [name, sel] of [
       ['custom-textarea', '.custom-textarea'],
@@ -90,15 +100,15 @@ export async function GET(req: NextRequest) {
     result.elements = counts;
     result.steps.push('elements: ' + JSON.stringify(counts));
 
-    // If logged in UI found, trigger create
-    if (counts['custom-textarea'] > 0 && counts['create-btn'] > 0) {
+    // If logged in UI found, trigger create to capture hCaptcha token
+    if (uiFound && counts['create-btn'] > 0) {
       result.steps.push('UI found! triggering create...');
       try { await page.getByLabel('Close').click({ timeout: 1000 }); } catch(e) {}
       const ta = page.locator('.custom-textarea').first();
-      await ta.click({ timeout: 3000 });
+      await ta.click({ timeout: 3000 }).catch(() => {});
       await ta.pressSequentially('test', { delay: 50 });
       page.locator('button[aria-label="Create"] div.flex').click().catch(() => {});
-      await Promise.race([captureP, new Promise(r => setTimeout(r, 12000))]);
+      await Promise.race([captureP, new Promise(r => setTimeout(r, 8000))]);
       const tok = interceptedToken as string | null;
       result.browserToken = tok ? tok.substring(0, 40) + '...' : null;
       result.steps.push('token: ' + (tok ? tok.substring(0, 30) + '...' : 'null'));

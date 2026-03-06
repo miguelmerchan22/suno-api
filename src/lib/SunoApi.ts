@@ -451,21 +451,14 @@ class SunoApi {
       logger.info('Navigating to suno.com/create...');
       await page.goto('https://suno.com/create', {
         referer: 'https://www.google.com/',
-        waitUntil: 'load',
-        timeout: 30000
-      });
+        waitUntil: 'domcontentloaded',
+        timeout: 15000
+      }).catch((e: any) => logger.warn('goto: ' + e.message));
 
-      // Wait for Clerk handshake to complete — it redirects away from ?__clerk_handshake=...
-      if (page.url().includes('__clerk_handshake')) {
-        logger.info('Clerk handshake detected, waiting for redirect...');
-        await page.waitForURL((u: string) => !u.includes('__clerk_handshake'), { timeout: 15000 })
-          .catch((e: any) => logger.warn('handshake wait: ' + e.message));
-        await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
-      }
-
-      // Wait for Suno's React app to finish loading the song list
-      logger.info('Waiting for Suno interface to load...');
-      await page.waitForResponse('**/api/project/**', { timeout: 30000 });
+      // Wait for the create UI to appear — covers Clerk handshake redirect + React render.
+      // More reliable than chaining waitForURL + networkidle + waitForResponse.
+      logger.info('Waiting for Suno create UI (.custom-textarea)...');
+      await page.locator('.custom-textarea').waitFor({ state: 'visible', timeout: 40000 });
 
       if (this.ghostCursorEnabled)
         this.cursor = await createCursor(page);
