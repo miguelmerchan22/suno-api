@@ -1,0 +1,279 @@
+{
+  "name": "CapyMelodys – Auto YouTube Upload",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "11111111-0000-0000-0000-000000000001",
+      "name": "🧪 Test Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 400]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 15 * * *"
+            }
+          ]
+        }
+      },
+      "id": "11111111-0000-0000-0000-000000000002",
+      "name": "⏰ 9am CDMX – Mañana",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 560]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 22 * * *"
+            }
+          ]
+        }
+      },
+      "id": "11111111-0000-0000-0000-000000000003",
+      "name": "⏰ 4pm CDMX – Tarde",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 720]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════════════════\n// Determinar Estilo del Día\n// ══════════════════════════════════════════════════════════════════\n// 9am CDMX = 15:00 UTC  |  4pm CDMX = 22:00 UTC\n// Ciudad de México NO usa horario de verano → siempre UTC-6\n// ══════════════════════════════════════════════════════════════════\n\nconst now = new Date();\nconst utcHour = now.getUTCHours();\nconst dayOfWeek = now.getUTCDay(); // 0=Dom 1=Lun 2=Mar 3=Mié 4=Jue 5=Vie 6=Sáb\n\n// Si la hora UTC es ≥ 19 o < 3 → slot de tarde (4pm CDMX = 22h UTC)\nconst isAfternoon = utcHour >= 19 || utcHour < 3;\n\n// ── ESTILOS DE MAÑANA (energéticos, alegres) ──────────────────────\nconst morningStyles = [\n  {\n    title: \"El Capibara Bailarín\",\n    tags: \"salsa infantil, tropical, animado, ritmo caribeño, canciones para niños\",\n    prompt: \"Alegre canción de salsa infantil sobre un capibara que adora bailar en la selva tropical. Percusión latina vibrante, trompetas festivas, piano de salsa, coros infantiles pegajosos, letra simple y repetitiva sobre bailar y divertirse con los amigos animales. Ritmo animado y muy contagioso.\",\n    youtubeTitle: \"El Capibara Bailarín 🎵 Salsa para Niños | CapyMelodys\",\n    description: \"🌞 ¡Buenos días pequeños amigos! Bienvenidos a CapyMelodys.\\n\\n🎵 ¡Hoy bailamos salsa con el Capibara Bailarín! 🎵\\n\\n¡Levántate, mueve los pies y baila con nuestro capibara favorito! Esta canción de salsa tropical te llenará de energía y alegría para empezar el día.\\n\\n🦫 CapyMelodys es el canal donde el capibara más musical del mundo te trae canciones increíbles cada día.\\n\\n👉 ¡Suscríbete y activa la 🔔 para no perderte ninguna canción!\\n\\n#CapyMelodys #CancionesInfantiles #SalsaParaNiños #Capibara #MúsicaInfantil #CancionesDeAnimales #BailaConNosotros\"\n  },\n  {\n    title: \"Las Aventuras del Capibara\",\n    tags: \"cumbia animada, aventura, infantil, colombiana, canciones para niños\",\n    prompt: \"Cumbia animada colombiana para niños sobre un capibara explorador que vive aventuras increíbles en el río Amazonas. Acordeón cumbiambero, caja y guacharaca, melodía muy contagiosa, letra descriptiva sobre los amigos del río: peces de colores, tortugas sabias, loros parlanchines y monos traviesos. Energético y muy alegre.\",\n    youtubeTitle: \"Las Aventuras del Capibara 🎵 Cumbia Infantil | CapyMelodys\",\n    description: \"🌞 ¡Hola amiguitos! Es hora de aventuras con CapyMelodys.\\n\\n🎵 ¡El Capibara sale a explorar el río con su cumbia! 🎵\\n\\n¡Ven a explorar el Amazonas con nuestro capibara aventurero! Conoce a todos sus amigos: peces de colores, tortugas sabias y monos traviesos.\\n\\n🦫 CapyMelodys trae las mejores canciones infantiles con animales cada día.\\n\\n👉 ¡Suscríbete y activa la 🔔!\\n\\n#CapyMelodys #CumbiaInfantil #Capibara #CancionesDeAventuras #MúsicaInfantil #Amazonas #AnimalesCantan\"\n  },\n  {\n    title: \"Capibara Campeón\",\n    tags: \"reggaeton infantil, motivacional, divertido, energético, niños\",\n    prompt: \"Reggaeton infantil divertido y motivacional donde el capibara es declarado campeón de todos los animales del bosque. Beat de reggaeton suave apropiado para niños, melodía pegajosa, letra sobre la autoestima el esfuerzo y la amistad. Coro muy fácil de aprender y repetir. Energético.\",\n    youtubeTitle: \"Capibara Campeón 🏆 Reggaeton Infantil | CapyMelodys\",\n    description: \"🌞 ¡Buenos días campeones! CapyMelodys los saluda.\\n\\n🎵 ¡Hoy somos todos campeones con el Capibara! 🎵\\n\\n¿Sabías que tú también eres un campeón? ¡Canta esta canción con el capibara y recuerda que con esfuerzo y amistad todo se puede!\\n\\n🦫 CapyMelodys: canciones infantiles con un mensaje positivo cada día.\\n\\n👉 ¡Suscríbete y activa la 🔔!\\n\\n#CapyMelodys #ReggaetonInfantil #Capibara #CancionesInfantiles #MúsicaParaNiños #Campeón #AutoEstima\"\n  },\n  {\n    title: \"El Capibara y el Río\",\n    tags: \"son jarocho, folclore mexicano, tradicional, infantil\",\n    prompt: \"Son jarocho tradicional mexicano para niños sobre un capibara que vive feliz junto al gran río. Arpa jarocha alegre, jaranas rítmicas, melodía folclórica veracruzana, letra poética sobre la naturaleza el río y la amistad entre animales del bosque tropical. Auténtico y muy festivo.\",\n    youtubeTitle: \"El Capibara y el Río 🎵 Son Jarocho Infantil | CapyMelodys\",\n    description: \"🌞 ¡Hola amigos! CapyMelodys les trae música folclórica.\\n\\n🎵 ¡Bailemos son jarocho con el Capibara junto al río! 🎵\\n\\nNuestro capibara vive feliz junto al río, rodeado de amigos y naturaleza. ¡Aprende sobre la música tradicional mexicana de una manera divertida!\\n\\n🦫 CapyMelodys: donde la música folclórica y los animales se encuentran.\\n\\n👉 ¡Suscríbete y activa la 🔔!\\n\\n#CapyMelodys #SonJarocho #Capibara #MúsicaMexicana #CancionesInfantiles #FolcloreMexicano #Jarocho\"\n  },\n  {\n    title: \"El Capibara Hace Amigos\",\n    tags: \"merengue dominicano, alegre, caribeño, amistad, niños\",\n    prompt: \"Merengue dominicano muy alegre y acelerado sobre un capibara amistoso que hace nuevos amigos en cada lugar que visita en la selva. Acordeón brillante, güira metálica y tambora, ritmo de merengue muy contagioso, letra sobre la importancia de ser amable hacer amigos nuevos y compartir. Para bailar y saltar.\",\n    youtubeTitle: \"El Capibara Hace Amigos 🎵 Merengue Infantil | CapyMelodys\",\n    description: \"🌞 ¡Arriba amigos! CapyMelodys con energía caribeña.\\n\\n🎵 ¡El Capibara te enseña a hacer amigos con merengue! 🎵\\n\\nEl capibara es el animal más amistoso del mundo. ¡Aprende con él cómo hacer amigos nuevos y ser feliz compartiendo!\\n\\n🦫 CapyMelodys: lecciones de vida con ritmo caribeño.\\n\\n👉 ¡Suscríbete y activa la 🔔!\\n\\n#CapyMelodys #MerenguInfantil #Capibara #Amistad #CancionesInfantiles #RitmoCaribeño #DominicanStyle\"\n  },\n  {\n    title: \"El Capibara en la Fiesta\",\n    tags: \"ska tropical, festivo, animado, fiesta, selva\",\n    prompt: \"Ska tropical festivo y animado sobre un capibara que organiza la mejor fiesta de animales en la selva. Guitarra ska con upstroke rítmico, metales festivos con trompeta y trombón, ritmo ska acelerado y bailable, letra sobre la celebración el baile y la alegría compartida entre animales. Muy energético.\",\n    youtubeTitle: \"El Capibara en la Fiesta 🎉 Ska Tropical | CapyMelodys\",\n    description: \"🌞 ¡A festejar con CapyMelodys!\\n\\n🎵 ¡El Capibara organiza la fiesta más grande de la selva! 🎵\\n\\n¡Todos los animales están invitados a la fiesta del capibara! Tortugas bailando, loros cantando y monos brincando. ¡Ven a celebrar con nosotros!\\n\\n🦫 CapyMelodys: la fiesta musical más divertida cada día.\\n\\n👉 ¡Suscríbete y activa la 🔔!\\n\\n#CapyMelodys #SkaInfantil #Capibara #FiestaAnimales #CancionesInfantiles #Celebración #TropicalSka\"\n  },\n  {\n    title: \"Capibara Va de Paseo\",\n    tags: \"chicha peruana, tropical andino, bailable, colorido, amazónico\",\n    prompt: \"Chicha peruana animada sobre un capibara que va de paseo por la selva amazónica peruana. Guitarra eléctrica tropical con distorsión suave estilo chicha, percusión andina vibrante, melodía muy bailable y colorida, letra sobre exploración los colores de la selva y los animales exóticos amazónicos. Muy alegre y movida.\",\n    youtubeTitle: \"Capibara Va de Paseo 🌿 Chicha Peruana | CapyMelodys\",\n    description: \"🌞 ¡Buenos días exploradores! CapyMelodys al rescate.\\n\\n🎵 ¡El Capibara sale de paseo por la selva amazónica! 🎵\\n\\n¡Acompaña al capibara en su paseo por la selva! Descubre los colores, los sonidos y los animales increíbles que viven en el Amazonas.\\n\\n🦫 CapyMelodys: explorando el mundo con música.\\n\\n👉 ¡Suscríbete y activa la 🔔!\\n\\n#CapyMelodys #ChichaPeruana #Capibara #SelvaAmazónica #CancionesInfantiles #Exploración #Perú\"\n  }\n];\n\n// ── ESTILOS DE TARDE (tranquilos, distintos géneros) ─────────────────\nconst afternoonStyles = [\n  {\n    title: \"La Tarde del Capibara\",\n    tags: \"jazz suave infantil, tranquilo, relajante, instrumental\",\n    prompt: \"Jazz suave e instrumental tranquilo para niños que evoca la tarde junto al río con un capibara. Piano de jazz suave y cálido, contrabajo pausado, escobillas en batería, melodía relajante y melódica. Sin letra vocal. Perfecta para que los niños se calmen después de jugar.\",\n    youtubeTitle: \"La Tarde del Capibara 🌅 Jazz Suave Infantil | CapyMelodys\",\n    description: \"🌅 ¡Buenas tardes amiguitos! CapyMelodys para relajarse.\\n\\n🎵 ¡Una tarde tranquila con el Capibara junto al río! 🎵\\n\\nDespués de tanto jugar, es momento de relajarse con el capibara. Escucha este suave jazz y deja que tu mente descanse mientras el capibara reposa junto al río.\\n\\n🦫 CapyMelodys: música para cada momento del día.\\n\\n👉 ¡Suscríbete y activa la 🔔!\\n\\n#CapyMelodys #JazzInfantil #Capibara #MúsicaRelajante #CancionesInfantiles #TardeTranquila #JazzParaNiños\"\n  },\n  {\n    title: \"El Capibara al Atardecer\",\n    tags: \"bossa nova suave, melódico, tranquilo, brasileño, poético\",\n    prompt: \"Bossa nova suave y melódica brasileña sobre un capibara que contempla el atardecer en el Pantanal. Guitarra nylon bossa nova suave y cálida, melodía pausada y contemplativa, letra poética en español sobre los colores del cielo el río dorado y la paz que trae la tarde. Tranquila y muy hermosa.\",\n    youtubeTitle: \"El Capibara al Atardecer 🌅 Bossa Nova | CapyMelodys\",\n    description: \"🌅 ¡Buenas tardes! CapyMelodys con ritmos suaves de Brasil.\\n\\n🎵 ¡Miremos juntos el atardecer con el Capibara! 🎵\\n\\nEl capibara observa cómo el sol se pone sobre el río dorado. El cielo se llena de colores naranja, rosa y morado. Un momento de paz y belleza natural.\\n\\n🦫 CapyMelodys: belleza natural en cada canción.\\n\\n👉 ¡Suscríbete y activa la 🔔!\\n\\n#CapyMelodys #BossaNova #Capibara #Atardecer #CancionesInfantiles #Pantanal #BosaNova\"\n  },\n  {\n    title: \"Nana del Capibara\",\n    tags: \"nana andina, tradicional, suave, canción de cuna, dormir\",\n    prompt: \"Nana andina tradicional muy suave cantada por una capibara mamá a sus bebés. Flauta andina dulce y cristalina, charango suave, ritmo lento y mecedor de cuna. Letra tierna sobre el amor maternal los sueños bonitos y el descanso. Ideal para que los niños pequeños se duerman tranquilamente.\",\n    youtubeTitle: \"Nana del Capibara 🌙 Canción de Cuna Andina | CapyMelodys\",\n    description: \"🌅 ¡Hora de descansar con CapyMelodys!\\n\\n🎵 ¡La mamá Capibara canta una nana para sus bebés! 🎵\\n\\nCierra los ojos y escucha cómo la mamá capibara canta suavemente a sus bebés. Esta nana andina te llevará a los sueños más bonitos.\\n\\n🦫 CapyMelodys: la voz suave que acompaña el descanso.\\n\\n👉 ¡Suscríbete y activa la 🔔!\\n\\n#CapyMelodys #NanaAndina #Capibara #CanciónDeCuna #CancionesInfantiles #DormirNiños #MúsicaDeCuna\"\n  },\n  {\n    title: \"Capibara Cuenta Estrellas\",\n    tags: \"canción de cuna tropical, suave, nocturna, mágica, estrellas\",\n    prompt: \"Canción de cuna tropical suave y mágica sobre un capibara que cuenta las estrellas antes de dormir. Marimba suave y cristalina, melodía tropical relajada y mecedora, ritmo de cuna muy suave, letra mágica sobre el cielo nocturno las constelaciones y los sueños de los animales. Perfecta para la hora de dormir.\",\n    youtubeTitle: \"Capibara Cuenta Estrellas ⭐ Canción de Cuna | CapyMelodys\",\n    description: \"🌅 ¡Buenas noches de parte de CapyMelodys!\\n\\n🎵 ¡El Capibara cuenta las estrellas antes de dormir! 🎵\\n\\nUna, dos, tres estrellas... ¡El capibara cuenta todas las estrellas del cielo! Acompaña al capibara en este viaje mágico hacia el mundo de los sueños.\\n\\n🦫 CapyMelodys: dulces sueños con cada canción.\\n\\n👉 ¡Suscríbete y activa la 🔔!\\n\\n#CapyMelodys #CanciónDeCuna #Capibara #CuentaEstrellas #CancionesInfantiles #DulcesSueños #Nocturna\"\n  },\n  {\n    title: \"Historias del Capibara\",\n    tags: \"folk infantil, narrativo, acústico, cuentos, naturaleza\",\n    prompt: \"Folk infantil suave y narrativo donde un capibara anciano cuenta historias de la selva a los animales jóvenes al caer la tarde. Guitarra acústica folk cálida y suave, melodía tranquila y narrativa que fluye naturalmente, letra que cuenta historias sobre animales y la sabiduría de la naturaleza. Evocadora y muy tranquilizadora.\",\n    youtubeTitle: \"Historias del Capibara 📖 Folk Infantil | CapyMelodys\",\n    description: \"🌅 ¡Hora de historias con CapyMelodys!\\n\\n🎵 ¡El Capibara anciano comparte sus historias de la selva! 🎵\\n\\nEl capibara más viejo de la selva se sienta bajo el árbol grande y comienza a contar sus aventuras. ¿Quieres escuchar sus historias?\\n\\n🦫 CapyMelodys: historias y música que nutren la imaginación.\\n\\n👉 ¡Suscríbete y activa la 🔔!\\n\\n#CapyMelodys #FolkInfantil #Capibara #HistoriasInfantiles #CancionesInfantiles #Imaginación #CuentosMusical\"\n  },\n  {\n    title: \"El Capibara Soñador\",\n    tags: \"piano y cuerdas, instrumental, suave, orquestal, sueños\",\n    prompt: \"Pieza instrumental suave de piano y cuerdas de cámara que evoca los sueños tranquilos de un capibara al atardecer. Melodía de piano melancólica y esperanzadora, violines y chelo suaves, arreglos orquestales simples y muy delicados. Sin letra. Evocadora tranquila y absolutamente hermosa.\",\n    youtubeTitle: \"El Capibara Soñador 🎹 Piano y Cuerdas | CapyMelodys\",\n    description: \"🌅 ¡Relájate con CapyMelodys!\\n\\n🎵 ¡El Capibara sueña con un mundo lleno de música! 🎵\\n\\nCierra los ojos y deja volar tu imaginación con esta suave melodía de piano. El capibara soñador te lleva a un mundo de fantasía y paz.\\n\\n🦫 CapyMelodys: música para el alma y la imaginación.\\n\\n👉 ¡Suscríbete y activa la 🔔!\\n\\n#CapyMelodys #PianoInfantil #Capibara #MúsicaRelajante #CancionesInfantiles #SueñosHermosos #PianoYCuerdas\"\n  },\n  {\n    title: \"El Capibara y la Luna\",\n    tags: \"blues suave infantil, nocturno, melódico, luna, secretos\",\n    prompt: \"Blues suave infantil sobre un capibara que espera cada noche a la luna para contarle sus secretos y sus aventuras del día. Guitarra blues suave y muy expresiva, armónica dulce y melódica, ritmo blues lento y contemplativo, letra poética sobre la amistad secreta entre el capibara y la luna. Tranquilo y absolutamente hermoso.\",\n    youtubeTitle: \"El Capibara y la Luna 🌙 Blues Infantil | CapyMelodys\",\n    description: \"🌅 ¡Buenas noches de CapyMelodys!\\n\\n🎵 ¡El Capibara conversa con la Luna cada noche! 🎵\\n\\nCada noche, cuando el sol se va, el capibara busca a su amiga la luna para contarle todo lo que vivió durante el día. Una hermosa amistad entre la tierra y el cielo.\\n\\n🦫 CapyMelodys: magia nocturna en cada canción.\\n\\n👉 ¡Suscríbete y activa la 🔔!\\n\\n#CapyMelodys #BluesInfantil #Capibara #LaLuna #CancionesInfantiles #NochesMágicas #BluesSuave\"\n  }\n];\n\n// ── Seleccionar y retornar el estilo del día ───────────────────────\nconst styles = isAfternoon ? afternoonStyles : morningStyles;\nconst selected = styles[dayOfWeek];\n\nconsole.log(`[CapyMelodys] ${isAfternoon ? 'Tarde' : 'Mañana'} – Día ${dayOfWeek} – \"${selected.title}\"`);\n\nreturn [{ json: selected }];\n"
+      },
+      "id": "11111111-0000-0000-0000-000000000004",
+      "name": "🎨 Determinar Estilo del Día",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 560]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://suno-api-pskc.onrender.com/api/custom_generate",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "keypairs",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "prompt",
+              "value": "={{ $json.prompt }}"
+            },
+            {
+              "name": "tags",
+              "value": "={{ $json.tags }}"
+            },
+            {
+              "name": "title",
+              "value": "={{ $json.title }}"
+            },
+            {
+              "name": "make_instrumental",
+              "value": false
+            },
+            {
+              "name": "wait_audio",
+              "value": false
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "11111111-0000-0000-0000-000000000005",
+      "name": "🎵 Generar Canción en Suno",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 560]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════════════════\n// Esperar y Verificar Canción\n// Hace polling al endpoint /api/get hasta que la canción esté completa\n// ══════════════════════════════════════════════════════════════════\n\nconst API_BASE = 'https://suno-api-pskc.onrender.com';\nconst POLL_INTERVAL_MS = 10000;   // cada 10 segundos\nconst MAX_ATTEMPTS = 36;          // máximo 6 minutos\n\n// Obtener IDs de la respuesta del generate\nconst generateResponse = $input.first().json;\nconst songs = Array.isArray(generateResponse) ? generateResponse : [generateResponse];\nconst songIds = songs.map(s => s.id).filter(Boolean).join(',');\n\nif (!songIds) {\n  throw new Error('No se encontraron IDs de canciones en la respuesta: ' + JSON.stringify(generateResponse));\n}\n\nconsole.log(`[CapyMelodys] Esperando canciones: ${songIds}`);\n\n// Recuperar datos del estilo (de nodo anterior en el workflow)\nconst configJson = $('🎨 Determinar Estilo del Día').first().json;\n\n// ── Polling loop ───────────────────────────────────────────────────\nlet completedSong = null;\n\nfor (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {\n  // Esperar antes de consultar\n  await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));\n  \n  console.log(`[CapyMelodys] Intento ${attempt}/${MAX_ATTEMPTS} – verificando ${songIds}`);\n  \n  let statusSongs;\n  try {\n    const res = await fetch(`${API_BASE}/api/get?ids=${songIds}`);\n    if (!res.ok) {\n      console.warn(`[CapyMelodys] HTTP ${res.status} al verificar – reintentando...`);\n      continue;\n    }\n    statusSongs = await res.json();\n  } catch (fetchErr) {\n    console.warn(`[CapyMelodys] Fetch error: ${fetchErr.message} – reintentando...`);\n    continue;\n  }\n  \n  if (!Array.isArray(statusSongs) || statusSongs.length === 0) {\n    console.warn('[CapyMelodys] Respuesta inesperada del servidor');\n    continue;\n  }\n  \n  const statuses = statusSongs.map(s => s.status);\n  console.log(`[CapyMelodys] Estados: ${statuses.join(', ')}`);\n  \n  // Error en alguna canción\n  const failed = statusSongs.find(s => s.status === 'error');\n  if (failed) {\n    throw new Error('Error en la generación: ' + (failed.error_message || 'desconocido'));\n  }\n  \n  // Al menos una completa con audio_url\n  const done = statusSongs.find(s =>\n    (s.status === 'complete' || s.status === 'streaming') && s.audio_url\n  );\n  \n  if (done) {\n    completedSong = done;\n    console.log(`[CapyMelodys] ✅ Canción lista: ${done.id}`);\n    console.log(`[CapyMelodys] audio_url: ${done.audio_url}`);\n    console.log(`[CapyMelodys] image_url: ${done.image_url}`);\n    break;\n  }\n}\n\nif (!completedSong) {\n  throw new Error(`Timeout: la canción no se completó en ${MAX_ATTEMPTS * POLL_INTERVAL_MS / 1000} segundos`);\n}\n\n// ── Retornar datos para los nodos siguientes ───────────────────────\nreturn [{\n  json: {\n    song_id:      completedSong.id,\n    audio_url:    completedSong.audio_url,\n    image_url:    completedSong.image_url || '',\n    lyric:        completedSong.lyric || '',\n    duration:     completedSong.duration || '',\n    // Datos para YouTube (copiados del nodo de estilo)\n    youtubeTitle: configJson.youtubeTitle,\n    description:  configJson.description,\n    tags:         configJson.tags,\n    songTitle:    configJson.title,\n  }\n}];\n"
+      },
+      "id": "11111111-0000-0000-0000-000000000006",
+      "name": "⏳ Esperar y Verificar Canción",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 560]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://suno-api-pskc.onrender.com/api/create_video",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "keypairs",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "audio_url",
+              "value": "={{ $json.audio_url }}"
+            },
+            {
+              "name": "image_url",
+              "value": "={{ $json.image_url }}"
+            },
+            {
+              "name": "title",
+              "value": "={{ $json.songTitle }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 300000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "11111111-0000-0000-0000-000000000007",
+      "name": "🎬 Crear Video MP4",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1520, 560]
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $('⏳ Esperar y Verificar Canción').first().json.youtubeTitle }}",
+        "description": "={{ $('⏳ Esperar y Verificar Canción').first().json.description }}",
+        "categoryId": "10",
+        "privacyStatus": "public",
+        "binaryPropertyName": "data",
+        "options": {
+          "publicStatsViewable": true,
+          "stabilize": false,
+          "tags": "={{ $('⏳ Esperar y Verificar Canción').first().json.tags }}"
+        }
+      },
+      "id": "11111111-0000-0000-0000-000000000008",
+      "name": "📺 Subir a YouTube",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [1840, 560],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "REEMPLAZAR_CON_ID_CREDENCIAL_YOUTUBE",
+          "name": "YouTube – CapyMelodys"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "🧪 Test Manual": {
+      "main": [
+        [
+          {
+            "node": "🎨 Determinar Estilo del Día",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏰ 9am CDMX – Mañana": {
+      "main": [
+        [
+          {
+            "node": "🎨 Determinar Estilo del Día",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏰ 4pm CDMX – Tarde": {
+      "main": [
+        [
+          {
+            "node": "🎨 Determinar Estilo del Día",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🎨 Determinar Estilo del Día": {
+      "main": [
+        [
+          {
+            "node": "🎵 Generar Canción en Suno",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🎵 Generar Canción en Suno": {
+      "main": [
+        [
+          {
+            "node": "⏳ Esperar y Verificar Canción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏳ Esperar y Verificar Canción": {
+      "main": [
+        [
+          {
+            "node": "🎬 Crear Video MP4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🎬 Crear Video MP4": {
+      "main": [
+        [
+          {
+            "node": "📺 Subir a YouTube",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "versionId": "capy-v1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "capymelodys"
+  },
+  "id": "capymelodys-workflow-v1",
+  "tags": [
+    {
+      "name": "CapyMelodys",
+      "createdAt": "2026-03-07T00:00:00.000Z",
+      "updatedAt": "2026-03-07T00:00:00.000Z",
+      "id": "capy-tag-01"
+    }
+  ]
+}
