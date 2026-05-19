@@ -35,7 +35,6 @@ reactie.
 
 Met vriendelijke groeten,
 
-[Voornaam Achternaam]
-[Telefoonnummer]
-[E-mailadres]
-[LinkedIn-profiel, optioneel]
+Michel Merchan
++32 483 29 37 97
+Andre8asbl@gmail.com
