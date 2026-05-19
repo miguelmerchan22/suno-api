@@ -38,3 +38,4 @@ Met vriendelijke groeten,
 Michel Merchan
 +32 483 29 37 97
 Andre8asbl@gmail.com
+https://www.linkedin.com/in/michel-miguel-merchan-mayorga-91815a25
